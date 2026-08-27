@@ -2,13 +2,17 @@
 
 ## Mandatory source of truth
 
-Before making any change, read the official IT5006 project specification:
+Before making any change, read both of these project requirement sources:
 
-**https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables**
+**Official live course page:**
+https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables
 
-This page is authoritative for scope, rules, deliverables, and deadlines. If repository documentation, prior prompts, assumptions, or an agent's own reasoning conflict with the official specification, **the official specification wins**.
+**Repository PDF copy:**
+[`docs/Project Requirements.pdf`](docs/Project%20Requirements.pdf)
 
-A checked local summary of the official requirements is maintained in `README.md` and `docs/project-requirements.md`. Agents must not invent, infer, or silently alter project deadlines or deliverables.
+The official live course page is authoritative for scope, rules, deliverables, and deadlines. The PDF is a checked local reference copy so agents can work reliably even when the external page is unavailable. If the PDF, repository documentation, prior prompts, assumptions, or an agent's own reasoning conflict with the latest official course page or Canvas announcement, **the latest official course source wins**.
+
+Agents must not invent, infer, or silently alter project deadlines or deliverables.
 
 ## Human-facing team rules that agents must enforce
 
@@ -103,12 +107,13 @@ Supporting files such as `.github/`, `.gitignore`, `AGENTS.md`, and `requirement
 ## Before changing anything
 
 1. Read `README.md`.
-2. Read the official IT5006 project specification linked above.
-3. Read `docs/project-requirements.md`.
-4. Read `docs/ai-use-and-agent-guidelines.md`.
-5. Inspect existing files before creating replacements.
-6. Understand which project deliverable the proposed change supports.
-7. Prefer editing existing files over creating duplicate alternatives.
+2. Read the official live project page when accessible.
+3. Read `docs/Project Requirements.pdf` as the checked local copy.
+4. Read `docs/project-requirements.md`.
+5. Read `docs/ai-use-and-agent-guidelines.md`.
+6. Inspect existing files before creating replacements.
+7. Understand which project deliverable the proposed change supports.
+8. Prefer editing existing files over creating duplicate alternatives.
 
 ## Safe repository behaviour
 
