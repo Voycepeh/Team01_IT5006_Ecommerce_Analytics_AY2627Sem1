@@ -45,8 +45,11 @@ dist/
 *.temp
 ~$*
 
-# Local data artefacts that should not be committed by default
-# Review before adding project data to Git. Keep required reproducible source
-# datasets only when permitted and appropriately sized.
+# Raw course data is stored locally only.
+# Each teammate should extract the lecturer-provided Olist dataset into data/raw/.
+data/raw/*
+!data/raw/README.md
+
+# Local data artefacts
 data/**/.cache/
 data/**/tmp/
