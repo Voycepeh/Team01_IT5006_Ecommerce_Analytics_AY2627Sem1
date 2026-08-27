@@ -2,13 +2,142 @@
 
 This repository follows the folder structure required for the IT5006 project. Keep contributions simple, easy to review, and in the correct folder.
 
+## First-time local setup
+
+If you are newer to Git or coding, follow these steps once before starting project work.
+
+### 1. Clone the repository
+
+Open a terminal and run:
+
+```bash
+git clone https://github.com/Voycepeh/Team01_IT5006_Ecommerce_Analytics_AY2627Sem1.git
+cd Team01_IT5006_Ecommerce_Analytics_AY2627Sem1
+```
+
+You now have a local copy of the project on your computer.
+
+### 2. Add the lecturer-provided dataset locally
+
+Download the official Olist ZIP from the IT5006 Canvas Week 1 module.
+
+Extract the dataset files into:
+
+```text
+data/raw/
+```
+
+Example:
+
+```text
+data/
+└── raw/
+    ├── olist_customers_dataset.csv
+    ├── olist_orders_dataset.csv
+    ├── olist_order_items_dataset.csv
+    └── ...
+```
+
+The data files are intentionally ignored by Git and must stay on your own computer.
+
+### 3. Check that Git is not tracking the data
+
+Run:
+
+```bash
+git status
+```
+
+The CSV, SQLite and other dataset files under `data/` should not appear as files waiting to be committed.
+
+If they do appear, stop and ask a teammate before committing.
+
+### 4. Install the project environment
+
+From the repository folder, run:
+
+```bash
+pip install -r requirements.txt
+```
+
+The package list will be updated as the project develops.
+
+## Starting a piece of work
+
+Before changing files, update your local `main` branch:
+
+```bash
+git switch main
+git pull
+```
+
+Then create your own branch. Use a short name that describes your task:
+
+```bash
+git switch -c your-name/task-description
+```
+
+For example:
+
+```bash
+git switch -c alice/eda-orders
+```
+
+Do your work in the correct project folder.
+
+## Saving and sharing your work
+
+### 1. Check what changed
+
+```bash
+git status
+```
+
+Make sure no project data files are listed for commit.
+
+### 2. Stage the files you want to commit
+
+Prefer adding the specific files you changed instead of blindly adding everything.
+
+```bash
+git add notebooks/your_notebook.ipynb
+```
+
+or:
+
+```bash
+git add src/your_script.py
+```
+
+### 3. Commit your changes
+
+```bash
+git commit -m "Add order EDA"
+```
+
+Use a short message that explains what you changed.
+
+### 4. Push your branch to GitHub
+
+```bash
+git push -u origin your-name/task-description
+```
+
+### 5. Open a pull request
+
+Open the repository on GitHub. GitHub should show your recently pushed branch and offer a **Compare & pull request** button.
+
+Open a pull request into `main`, briefly explain what changed, and ask a teammate to review it before merging.
+
 ## Basic workflow
 
-1. Create a branch for your work.
-2. Put files in the correct lecturer-required folder.
-3. Commit only the files related to your task.
-4. Open a pull request before merging to `main`.
-5. Review your own changes before asking teammates to review.
+1. Pull the latest `main` before starting work.
+2. Create a branch for your task.
+3. Put files in the correct lecturer-required folder.
+4. Commit only the files related to your task.
+5. Push your branch and open a pull request.
+6. Review your own changes before asking teammates to review.
+7. Merge into `main` only after the work is ready.
 
 ## Data files
 
