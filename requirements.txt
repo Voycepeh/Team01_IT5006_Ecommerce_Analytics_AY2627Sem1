@@ -1,0 +1,4 @@
+# Project dependencies
+#
+# Add runtime packages here as the implementation develops.
+# Prefer pinned or bounded versions once the team confirms the working environment.
