@@ -4,13 +4,16 @@ Repository for Team 01's IT5006 e-commerce analytics project.
 
 > ## Official project specification — READ THIS FIRST
 >
-> **Official live source:**
+> **Readable repository version:**  
+> [`docs/project-requirements.md`](docs/project-requirements.md)
+>
+> **Official live source:**  
 > https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables
 >
-> **Repository PDF copy:**
+> **Archived original PDF:**  
 > [`docs/Project Requirements.pdf`](docs/Project%20Requirements.pdf)
 >
-> The official live course page remains the authority for scope, rules, deliverables, and deadlines. The PDF in this repository is a checked local reference copy for teammates and AI agents. If the PDF or this README ever differs from the live course page or a later Canvas announcement, follow the latest official course source.
+> For day-to-day work, humans and AI agents should read the Markdown version first because it is easier to search and parse. The latest official course page or Canvas announcement remains authoritative if any local copy differs.
 
 ## Team rules — read before contributing
 
