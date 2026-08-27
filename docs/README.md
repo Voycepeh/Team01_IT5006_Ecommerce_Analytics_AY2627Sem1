@@ -1,10 +1,17 @@
-# Documentation
+# Docs
 
-This folder contains project documentation that supports the code, analysis, collaboration process, and IT5006 deliverables.
+Use this folder for project documents and submission assets.
 
-Current documents:
+Put things here such as:
 
-- `project-requirements.md` — repository requirements and source-of-truth link.
-- `ai-use-and-agent-guidelines.md` — human and AI collaboration rules for the team.
+- project reports (`.pdf`, `.docx`)
+- presentation slides (`.pptx`, `.pdf`)
+- project requirements and reference documents
+- methodology notes or other written documentation
 
-Add further documentation here as the project develops, such as architecture notes, data dictionaries, methodology notes, deployment instructions, and decision records.
+Current reference files:
+
+- `project-requirements.md` — readable project requirements
+- `Project Requirements.pdf` — original PDF copy
+
+Keep deployment files such as Streamlit apps or Power BI dashboards in `deployment/`.
