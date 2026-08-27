@@ -1,13 +1,15 @@
 # Data
 
-This folder contains project data and data-related documentation.
+Use this folder for project data.
 
-## Rules
+## Raw data
 
-- Keep original/raw source data unchanged unless the project explicitly requires otherwise.
-- Clearly separate source data from transformed or generated data as the project develops.
-- Document important transformations, assumptions, filters, and joins.
-- Do not commit sensitive information or credentials.
-- Avoid committing unnecessarily large generated datasets when they can be reproduced from code.
+Put the lecturer-provided Olist CSV files in:
 
-When subfolders are introduced, document their purpose here.
+```text
+data/raw/
+```
+
+Raw files stay local and are not committed to GitHub. See [`raw/README.md`](raw/README.md) for the expected setup.
+
+Keep the original raw files unchanged. Create cleaned or transformed datasets separately only when the project needs them.
