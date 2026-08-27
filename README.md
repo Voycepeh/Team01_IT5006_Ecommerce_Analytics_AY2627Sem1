@@ -37,15 +37,9 @@ project-root/
 
 Keep it simple. Add subfolders only when we actually need them.
 
-## Team rules
+## Contributing
 
-1. Do normal work on a branch and open a pull request before merging to `main`.
-2. Do not overwrite or delete a teammate's work without agreement.
-3. Do not rename or remove the lecturer-required top-level folders without team agreement.
-4. Never commit passwords, tokens, API keys or other secrets.
-5. Do not fabricate data, model results, tests, citations or screenshots.
-6. Review and understand AI-assisted work before merging or submitting it.
-7. Keep changes focused and put files in the correct folder.
+For branch workflow, team rules, AI-assisted contribution guidance and file placement conventions, read [`CONTRIBUTING.md`](CONTRIBUTING.md).
 
 AI agents must also follow [`AGENTS.md`](AGENTS.md).
 
