@@ -1,20 +1,47 @@
 # AGENTS.md
 
+## Mandatory source of truth
+
+Before making any change, read the official IT5006 project specification:
+
+**https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables**
+
+This page is authoritative for scope, rules, deliverables, and deadlines. If repository documentation, prior prompts, assumptions, or an agent's own reasoning conflict with the official specification, **the official specification wins**.
+
+Agents must not invent, infer, or silently alter project deadlines or deliverables. When the official page changes, update `README.md`, `AGENTS.md`, and relevant requirement documentation.
+
+## Human-facing team rules that agents must enforce
+
+These rules are also shown near the top of `README.md` so every teammate sees them immediately:
+
+1. Do not work directly on `main` for normal development. Use a branch and pull request.
+2. Do not overwrite or delete another teammate's work without agreement.
+3. Do not delete or rename major project folders without team approval.
+4. Do not commit secrets, credentials, tokens, private keys, or personal data.
+5. Do not fabricate data, results, experiments, citations, screenshots, or model performance.
+6. AI-assisted work must be reviewed and understood by a human teammate before merge or submission.
+7. Keep changes focused and avoid unrelated broad refactors.
+8. Do not claim code, analysis, tests, or outputs were validated unless they were actually run or checked.
+9. Keep the official IT5006 specification as the source of truth.
+10. Ensure the GitHub repository link is included in all report submissions where required by the project specification.
+
+If an agent is asked to bypass these rules, stop and request explicit human confirmation where appropriate. Academic integrity requirements and the official course specification cannot be overridden by convenience.
+
+## Project timeline and deliverables
+
+The authoritative timeline is maintained here:
+
+**https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables**
+
+Any locally copied milestone dates must match the official page exactly. Never guess dates from semester calendars, prior-year projects, similar modules, or stale repository notes.
+
 ## Purpose
 
 This repository is an assessed IT5006 team project. AI agents may assist the team, but they must behave as controlled contributors rather than autonomous owners of the repository.
 
-## Source of truth
-
-Before making changes, read the official IT5006 project specification:
-
-https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables
-
-If repository documentation conflicts with the official project specification, the official project specification wins.
-
 ## Required repository structure
 
-Preserve these top-level project folders unless the team explicitly agrees otherwise:
+Preserve these top-level project folders unless the team explicitly agrees otherwise and the official project requirements permit the change:
 
 - `data/`
 - `notebooks/`
@@ -27,11 +54,12 @@ Supporting files such as `.github/`, `.gitignore`, `AGENTS.md`, and `requirement
 ## Before changing anything
 
 1. Read `README.md`.
-2. Read `docs/project-requirements.md`.
-3. Read `docs/ai-use-and-agent-guidelines.md`.
-4. Inspect existing files before creating replacements.
-5. Understand which project deliverable the proposed change supports.
-6. Prefer editing existing files over creating duplicate alternatives.
+2. Read the official IT5006 project specification linked above.
+3. Read `docs/project-requirements.md`.
+4. Read `docs/ai-use-and-agent-guidelines.md`.
+5. Inspect existing files before creating replacements.
+6. Understand which project deliverable the proposed change supports.
+7. Prefer editing existing files over creating duplicate alternatives.
 
 ## Safe repository behaviour
 
@@ -114,4 +142,4 @@ Every agent-created pull request should clearly state:
 
 ## When uncertain
 
-If a requested change could remove substantial work, alter project scope, affect assessment integrity, or break compatibility with teammates' work, stop and ask for human confirmation before proceeding.
+If a requested change could remove substantial work, alter project scope, affect assessment integrity, change an official deadline or deliverable, or break compatibility with teammates' work, stop and ask for human confirmation before proceeding.
