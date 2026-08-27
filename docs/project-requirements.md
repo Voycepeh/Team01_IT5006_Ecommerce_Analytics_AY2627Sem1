@@ -2,11 +2,15 @@
 
 ## Source of truth
 
-The official IT5006 project specification is the authoritative source for project requirements, deliverables, and timelines:
+Use both references below:
 
+**Official live course page:**
 https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables
 
-If this document conflicts with the official specification, follow the official specification.
+**Repository PDF copy:**
+[`Project Requirements.pdf`](Project%20Requirements.pdf)
+
+The official live course page is authoritative for project requirements, deliverables, and timelines. The PDF is a checked local copy for reliable access by teammates and AI agents. If this document or the PDF conflicts with the latest official course page or Canvas announcement, follow the latest official course source.
 
 ## GitHub repository requirements
 
@@ -31,9 +35,10 @@ This repository implements those requirements with the required folders plus sup
 - `.gitignore`
 - `.github/pull_request_template.md`
 - `requirements.txt`
+- `docs/Project Requirements.pdf`
 
 These supporting files do not replace or alter the required project folders.
 
 ## Maintenance
 
-As the lecturer updates or clarifies project requirements, update this document and the root README so the repository remains aligned with the official specification.
+As the lecturer updates or clarifies project requirements, update the local PDF if needed and keep this document, `README.md`, and `AGENTS.md` aligned with the latest official specification.
