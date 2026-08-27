@@ -1,18 +1,14 @@
 # IT5006 E-commerce Analytics — Team 01
 
-Team 01 repository for the IT5006 E-commerce Analytics project.
+Repository for Team 01's IT5006 Fundamentals of Data Analytics project using the Olist Brazilian E-Commerce dataset.
 
-> ## Project requirements — read first
->
-> **Readable local version:** [`docs/project-requirements.md`](docs/project-requirements.md)  
-> **Official course page:** https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables  
-> **Original PDF copy:** [`docs/Project Requirements.pdf`](docs/Project%20Requirements.pdf)
->
-> The latest official course page or Canvas announcement is the final authority if anything differs.
+## Project overview
 
-## Where to put your files
+This project applies the data analytics workflow taught in IT5006 to an e-commerce dataset. The assessed work develops across the course phases, covering exploratory data analysis, problem definition, predictive modelling, dashboarding and a deployment proof of concept.
 
-Follow the folder structure required by the lecturer:
+The project will include both classification and regression work and will keep the modelling scope focused in line with the course requirements.
+
+## Repository structure
 
 ```text
 project-root/
@@ -24,47 +20,36 @@ project-root/
 └── README.md
 ```
 
-| You have... | Put it in... |
-| --- | --- |
-| CSV, Excel, Parquet or other project data | `data/` |
-| EDA, modelling or experiment notebooks (`.ipynb`) | `notebooks/` |
-| Reusable Python scripts (`.py`) | `src/` |
-| Streamlit / FastAPI / Gradio app files | `deployment/` |
-| Power BI (`.pbix`) or other deployable dashboard files | `deployment/` |
-| Reports (`.pdf`, `.docx`) | `docs/` |
-| Presentation slides (`.pptx`, `.pdf`) | `docs/` |
-| Project notes, references and requirement documents | `docs/` |
+- `data/` contains the local project data structure. Dataset files themselves are not committed to GitHub.
+- `notebooks/` contains exploratory analysis, modelling and experiments.
+- `src/` contains reusable Python code where needed.
+- `deployment/` contains dashboard and deployment assets.
+- `docs/` contains reports, presentation materials, references and project documentation.
 
-Keep it simple. Add subfolders only when we actually need them.
+## Project deliverables
 
-## Contributing
+| Phase | Main deliverables | Due |
+| --- | --- | --- |
+| Phase 1 | Literature Review, EDA and interactive dashboard | **13 Sep 2026, 23:59** |
+| Phase 2 | Problem Definition and Modelling | **11 Oct 2026, 23:59** |
+| Phase 3 | Final report, deployment and presentation | **Nov 2026** |
 
-For branch workflow, team rules, AI-assisted contribution guidance and file placement conventions, read [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Presentation slides are locked on **4 Nov 2026, 23:59** and the final report with deployment ZIP is due **8 Nov 2026, 23:59**.
 
-AI agents must also follow [`AGENTS.md`](AGENTS.md).
+## Project requirements
 
-## Key dates
+The repository keeps a readable local copy of the project requirements for reference:
 
-| Milestone | Due |
-| --- | --- |
-| Team formation | **23 Aug 2026** |
-| Phase 1 — Literature Survey & EDA | **13 Sep 2026, 23:59** |
-| Phase 2 — Problem Definition & Modelling | **11 Oct 2026, 23:59** |
-| Presentation slides locked | **4 Nov 2026, 23:59** |
-| Final report + deployment ZIP | **8 Nov 2026, 23:59** |
-| Live presentation | **5 or 12 Nov 2026** |
-| Peer evaluation | **15 Nov 2026, 23:59** |
+- [`docs/project-requirements.md`](docs/project-requirements.md)
+- [`docs/Project Requirements.pdf`](docs/Project%20Requirements.pdf)
+- Official course page: https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables
 
-See [`docs/project-requirements.md`](docs/project-requirements.md) for the full deliverables and marking requirements.
+If there is any difference, the latest official course page or Canvas announcement is the final authority.
 
-## Setup
+## Environment
 
-```bash
-pip install -r requirements.txt
-```
+Project dependencies are recorded in [`requirements.txt`](requirements.txt) and will be updated as the analysis develops.
 
-Add required Python packages to `requirements.txt` as the project develops.
+## Team contribution guide
 
-## Submission reminder
-
-The GitHub repository link must be included in all report submissions.
+Team workflow and local setup instructions are kept separately in [`CONTRIBUTING.md`](CONTRIBUTING.md).
