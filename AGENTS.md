@@ -2,15 +2,13 @@
 
 ## Mandatory source of truth
 
-Before making any change, read both of these project requirement sources:
+Before making any change, read the project requirements in this order:
 
-**Official live course page:**
-https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables
+1. **Readable repository version:** [`docs/project-requirements.md`](docs/project-requirements.md)
+2. **Official live course page:** https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables
+3. **Archived original PDF:** [`docs/Project Requirements.pdf`](docs/Project%20Requirements.pdf)
 
-**Repository PDF copy:**
-[`docs/Project Requirements.pdf`](docs/Project%20Requirements.pdf)
-
-The official live course page is authoritative for scope, rules, deliverables, and deadlines. The PDF is a checked local reference copy so agents can work reliably even when the external page is unavailable. If the PDF, repository documentation, prior prompts, assumptions, or an agent's own reasoning conflict with the latest official course page or Canvas announcement, **the latest official course source wins**.
+Use the Markdown version for day-to-day work because it is easier for humans and agents to search and parse. The latest official course page or Canvas announcement remains authoritative if any local copy differs.
 
 Agents must not invent, infer, or silently alter project deadlines or deliverables.
 
@@ -107,9 +105,9 @@ Supporting files such as `.github/`, `.gitignore`, `AGENTS.md`, and `requirement
 ## Before changing anything
 
 1. Read `README.md`.
-2. Read the official live project page when accessible.
-3. Read `docs/Project Requirements.pdf` as the checked local copy.
-4. Read `docs/project-requirements.md`.
+2. Read `docs/project-requirements.md` fully for project-scope work.
+3. Check the official live project page when accessible, especially for deadlines or changed instructions.
+4. Use `docs/Project Requirements.pdf` only as the archived original when needed.
 5. Read `docs/ai-use-and-agent-guidelines.md`.
 6. Inspect existing files before creating replacements.
 7. Understand which project deliverable the proposed change supports.
