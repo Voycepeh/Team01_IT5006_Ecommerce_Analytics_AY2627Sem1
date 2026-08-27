@@ -2,13 +2,38 @@
 
 Repository for Team 01's IT5006 e-commerce analytics project.
 
-## Source of truth
+> ## Official project specification — READ THIS FIRST
+>
+> **The official IT5006 project page is the source of truth for scope, rules, deliverables, and deadlines:**
+>
+> **https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables**
+>
+> If anything in this repository conflicts with the official project specification, follow the official specification.
 
-The official IT5006 project specification is the source of truth for requirements, deliverables, and timelines:
+## Team rules — humans and AI-assisted contributors
 
-https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables
+Read these before changing the repository:
 
-If anything in this repository conflicts with the official project specification, follow the official specification.
+1. **Do not work directly on `main` for normal development.** Use a branch and pull request.
+2. **Do not overwrite or delete another teammate's work** without agreement.
+3. **Do not delete or rename major project folders** without team approval.
+4. **Do not commit secrets, credentials, tokens, private keys, or personal data.**
+5. **Do not fabricate data, results, experiments, citations, screenshots, or model performance.**
+6. **Review and understand AI-assisted work before merging or submitting it.**
+7. **Keep changes focused.** Avoid unrelated broad refactors in the same pull request.
+8. **Record what was actually tested.** Do not claim that code or analysis was validated if it was not run.
+9. **Keep the official IT5006 requirements as the source of truth.** Do not let local documentation or an AI agent override the course specification.
+10. **Include the GitHub repository link in all report submissions**, as required by the project specification.
+
+AI agents must additionally follow [`AGENTS.md`](AGENTS.md) and [`docs/ai-use-and-agent-guidelines.md`](docs/ai-use-and-agent-guidelines.md).
+
+## Project timeline and deliverables
+
+The authoritative timeline is maintained in the official IT5006 project specification:
+
+**https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables**
+
+The key dates and deliverables in this README must always be copied from and checked against that page. **Do not guess or infer deadlines.** If the lecturer updates the official page, update this README and `AGENTS.md` accordingly.
 
 ## Required repository structure
 
@@ -45,18 +70,6 @@ pip install -r requirements.txt
 4. Follow any task-specific instructions documented in the relevant folder or notebook.
 
 Dependencies will be added to `requirements.txt` as the project implementation develops.
-
-## Collaboration workflow
-
-- Do not work directly on `main` for normal development.
-- Create a focused branch for each change.
-- Keep changes small enough for teammates to review.
-- Open a pull request before merging into `main`.
-- Review generated or AI-assisted work before merging.
-- Never commit credentials, tokens, passwords, or private keys.
-- Do not silently replace another teammate's work.
-
-AI agents must also follow `AGENTS.md` and `docs/ai-use-and-agent-guidelines.md`.
 
 ## Academic integrity
 
