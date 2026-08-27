@@ -8,36 +8,85 @@ Before making any change, read the official IT5006 project specification:
 
 This page is authoritative for scope, rules, deliverables, and deadlines. If repository documentation, prior prompts, assumptions, or an agent's own reasoning conflict with the official specification, **the official specification wins**.
 
-Agents must not invent, infer, or silently alter project deadlines or deliverables. When the official page changes, update `README.md`, `AGENTS.md`, and relevant requirement documentation.
+A checked local summary of the official requirements is maintained in `README.md` and `docs/project-requirements.md`. Agents must not invent, infer, or silently alter project deadlines or deliverables.
 
 ## Human-facing team rules that agents must enforce
 
-These rules are also shown near the top of `README.md` so every teammate sees them immediately:
-
-1. Do not work directly on `main` for normal development. Use a branch and pull request.
+1. Do not work directly on `main` for normal development. Use a focused branch and pull request.
 2. Do not overwrite or delete another teammate's work without agreement.
 3. Do not delete or rename major project folders without team approval.
 4. Do not commit secrets, credentials, tokens, private keys, or personal data.
-5. Do not fabricate data, results, experiments, citations, screenshots, or model performance.
+5. Do not fabricate data, results, experiments, citations, screenshots, deployment evidence, or model performance.
 6. AI-assisted work must be reviewed and understood by a human teammate before merge or submission.
 7. Keep changes focused and avoid unrelated broad refactors.
-8. Do not claim code, analysis, tests, or outputs were validated unless they were actually run or checked.
+8. Do not claim code, analysis, tests, deployment, or outputs were validated unless they were actually run or checked.
 9. Keep the official IT5006 specification as the source of truth.
-10. Ensure the GitHub repository link is included in all report submissions where required by the project specification.
+10. Ensure the GitHub repository link is included in all report submissions.
 
-If an agent is asked to bypass these rules, stop and request explicit human confirmation where appropriate. Academic integrity requirements and the official course specification cannot be overridden by convenience.
+## Official milestone schedule
 
-## Project timeline and deliverables
+| Milestone | Due date | Deliverable | Weight |
+| --- | --- | --- | ---: |
+| Team formation | Sun, 23 Aug 2026 | Canvas team signup | — |
+| Phase 1: Literature Survey & EDA | Sun, 13 Sep 2026, 23:59 | Report + dashboard + GitHub link | 20% |
+| Recess / problem scoping | 19–27 Sep 2026 | Team problem scoping | — |
+| Phase 2: Problem Definition & Modelling | Sun, 11 Oct 2026, 23:59 | Technical report + code; 1–2 problems; 2–3 model families total | 40% |
+| Phase 3: Presentation slides locked | Wed, 4 Nov 2026, 23:59 | Final deck (PDF/PPT) | Part of Phase 3 |
+| Phase 3: Deployment & Final Report | Sun, 8 Nov 2026, 23:59 | Report + deployment + slides + GitHub link in ZIP | 40% combined Phase 3 |
+| Live presentation | Thu, 5 Nov or Thu, 12 Nov 2026 | 10 min presentation + 5 min Q&A | Part of Phase 3 |
+| Peer evaluation | Sun, 15 Nov 2026, 23:59 | Individual assessment | Part of Phase 3 |
 
-The authoritative timeline is maintained here:
+Teaching period: 10 Aug–13 Nov 2026. Class: Thursdays, 6:30–9:30 PM. Reading week: 14–20 Nov 2026. Examinations: 21 Nov–5 Dec 2026.
 
-**https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables**
+## Deliverable constraints agents must respect
 
-Any locally copied milestone dates must match the official page exactly. Never guess dates from semester calendars, prior-year projects, similar modules, or stale repository notes.
+### Phase 1
 
-## Purpose
+- 4–5 page report excluding cover, references, and appendices.
+- Literature review and EDA.
+- Interactive dashboard using Streamlit, Tableau Public, or Power BI.
+- Combined PDF must include dashboard link and GitHub repository link.
+- GitHub repository contains raw code/notebooks.
 
-This repository is an assessed IT5006 team project. AI agents may assist the team, but they must behave as controlled contributors rather than autonomous owners of the repository.
+### Phase 2
+
+- 6–8 page report excluding cover, references, and appendices.
+- Define 1 or 2 analytics problems maximum.
+- Project must cover both classification and regression.
+- Use 2–3 model families total across the project; prioritise quality over quantity.
+- Use disciplined train/test or train/validation/test methodology, cross-validation, leakage prevention, reproducible random seeds, suitable metrics, interpretability, and model comparison.
+- Classification metrics may include Precision, Recall, F1, ROC-AUC / PR-AUC as appropriate.
+- Regression metrics may include MAE, RMSE, and R² as appropriate.
+- Technical report must include GitHub repository link; repository should include notebooks/Python scripts and model-performance summaries.
+
+### Phase 3
+
+- Final report: 15–20 pages excluding cover, references, and appendices.
+- Deploy a POC/MVP through Streamlit Cloud, FastAPI, Gradio, or similar.
+- Live URL, clear usage instructions, edge-case handling, and no hard-coded credentials.
+- At least one deployed model from the project.
+- Presentation deck is locked at the 4 Nov deadline and must match the version used live and included in the final ZIP.
+- Final ZIP is due 8 Nov and includes final report PDF, locked presentation slides, and GitHub repository link.
+- Live presentation is 10 minutes plus 5 minutes Q&A.
+
+## Course-wide technical and academic rules
+
+- Use the Olist Brazilian E-Commerce dataset as the primary required data source.
+- Join and document relevant tables for the chosen problem(s).
+- For customer-level analysis, verify whether `customer_id` or `customer_unique_id` is the correct identifier before feature engineering.
+- Prevent target leakage. Do not use information that is only available after the prediction point.
+- For imbalanced classification, use suitable metrics/handling and do not rely on accuracy alone.
+- Prefer scikit-learn Pipelines where possible, especially to keep preprocessing inside cross-validation folds.
+- Start with the simplest model variant within a family and justify added complexity with evidence.
+- Set and document random seeds for reproducibility.
+- Document transformations, assumptions, error handling, and validation checks.
+- Required tooling includes Python, a dashboard tool, a deployment platform, GitHub, and documented notebooks.
+- Deployment must be tested before submission.
+- Cite all sources appropriately. Original analysis and interpretation are required.
+- Collaboration within the team is encouraged; collaboration between teams is discouraged.
+- AI tools must be declared and appropriately credited.
+- Reports are PDF, 12pt font, single-spaced, with figure captions/table labels and consistent formatting.
+- Late policy: 0–24h = 10% penalty; 24–48h = 20%; more than 48h = 50%; more than 7 days = zero marks.
 
 ## Required repository structure
 
@@ -92,23 +141,7 @@ Supporting files such as `.github/`, `.gitignore`, `AGENTS.md`, and `requirement
 - Run relevant checks before claiming that work is complete.
 - Do not claim code was executed or validated unless it actually was.
 
-## Documentation rules
-
-For meaningful changes, update the relevant documentation where needed.
-
-Document:
-
-- purpose
-- assumptions
-- input data
-- important transformations
-- outputs
-- limitations
-- how to reproduce the work
-
 ## Academic integrity and AI use
-
-AI assistance must not be presented as unquestioned human-authored work where course rules require disclosure or original team authorship.
 
 Agents must not fabricate:
 
