@@ -10,11 +10,25 @@ This repository follows the folder structure required for the IT5006 project. Ke
 4. Open a pull request before merging to `main`.
 5. Review your own changes before asking teammates to review.
 
+## Data files
+
+**Do not commit project data files to GitHub.**
+
+All files under `data/` are intended to stay local and are covered by `.gitignore`. This includes raw, cleaned, processed, sampled and model-ready datasets.
+
+For the lecturer-provided Olist dataset, download the official ZIP from the IT5006 Canvas Week 1 module and extract the files locally into:
+
+```text
+data/raw/
+```
+
+Only README instruction files inside `data/` should be committed. Do not force-add ignored data files with `git add -f`.
+
 ## Where to put files
 
 | File / asset | Folder |
 | --- | --- |
-| CSV, Excel, Parquet and other project data | `data/` |
+| Local project data | `data/` (do not commit) |
 | EDA, modelling and experiment notebooks (`.ipynb`) | `notebooks/` |
 | Reusable Python scripts (`.py`) | `src/` |
 | Streamlit, FastAPI or Gradio app files | `deployment/` |
@@ -27,13 +41,14 @@ Do not add new top-level project folders unless the team agrees and the lecturer
 
 ## Team rules
 
-1. Do not overwrite or delete a teammate's work without agreement.
-2. Do not rename or remove the lecturer-required top-level folders without team agreement.
-3. Never commit passwords, tokens, API keys or other secrets.
-4. Do not fabricate data, model results, tests, citations or screenshots.
-5. Review and understand AI-assisted work before merging or submitting it.
-6. Keep changes focused and avoid unrelated edits in the same pull request.
-7. Only state that something was tested or validated if it was actually checked.
+1. Do not commit any project data files to GitHub.
+2. Do not overwrite or delete a teammate's work without agreement.
+3. Do not rename or remove the lecturer-required top-level folders without team agreement.
+4. Never commit passwords, tokens, API keys or other secrets.
+5. Do not fabricate data, model results, tests, citations or screenshots.
+6. Review and understand AI-assisted work before merging or submitting it.
+7. Keep changes focused and avoid unrelated edits in the same pull request.
+8. Only state that something was tested or validated if it was actually checked.
 
 ## AI-assisted contributions
 
