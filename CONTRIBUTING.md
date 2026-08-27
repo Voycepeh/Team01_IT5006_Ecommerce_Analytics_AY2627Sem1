@@ -40,6 +40,14 @@ data/
 
 The data files are intentionally ignored by Git and must stay on your own computer.
 
+### Example local setup
+
+After cloning the repository and placing the lecturer-provided Olist files under `data/raw/`, your local project can look like this in VS Code:
+
+![Example local repository setup](docs/images/local-repo-example.png)
+
+The CSV files can be visible in VS Code while still being ignored by Git. New notebooks or scripts you create may appear as untracked until you add and commit them.
+
 ### 3. Check that Git is not tracking the data
 
 Run:
