@@ -1,8 +1,6 @@
 # Data
 
-Use this folder for project data.
-
-## Raw data
+All project data files stay local and are not committed to GitHub.
 
 Put the lecturer-provided Olist CSV files in:
 
@@ -10,6 +8,6 @@ Put the lecturer-provided Olist CSV files in:
 data/raw/
 ```
 
-Raw files stay local and are not committed to GitHub. See [`raw/README.md`](raw/README.md) for the expected setup.
+If we later create cleaned, processed, sampled, or model-ready datasets, keep them under `data/` as well. Git will ignore the data files automatically.
 
-Keep the original raw files unchanged. Create cleaned or transformed datasets separately only when the project needs them.
+README files inside `data/` may still be committed so teammates know what each folder is for.

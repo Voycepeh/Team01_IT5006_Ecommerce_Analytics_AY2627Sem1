@@ -45,11 +45,8 @@ dist/
 *.temp
 ~$*
 
-# Raw course data is stored locally only.
-# Each teammate should extract the lecturer-provided Olist dataset into data/raw/.
-data/raw/*
-!data/raw/README.md
-
-# Local data artefacts
-data/**/.cache/
-data/**/tmp/
+# Project data stays local and is not committed to GitHub.
+data/**
+!data/README.md
+!data/**/
+!data/**/README.md
