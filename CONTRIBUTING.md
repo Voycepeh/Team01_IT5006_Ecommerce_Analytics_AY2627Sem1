@@ -21,7 +21,7 @@ data/raw/
 
 The project should look roughly like this:
 
-![Example local repository setup](docs/images/local-repo-example.png)
+![Example local repository setup](docs/image/local-repo-example.png)
 
 The CSV files are for local use only and are ignored by Git.
 
