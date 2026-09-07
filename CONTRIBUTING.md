@@ -12,8 +12,7 @@ git clone https://github.com/Voycepeh/Team01_IT5006_Ecommerce_Analytics_AY2627Se
 ```
 
 3. Open the cloned repository in your IDE.
-4. Download the lecturer-provided Olist ZIP from the IT5006 Canvas Week 1 module.
-5. Extract the CSV files into:
+4. Use the shared Olist dataset under `data/raw/` when it is available in the repository. If the source files have not yet been added, download the lecturer-provided Olist ZIP from the IT5006 Canvas Week 1 module and extract the CSV files into:
 
 ```text
 data/raw/
@@ -23,33 +22,36 @@ The project should look roughly like this:
 
 ![Example local repository setup](docs/image/local-repo-example.png)
 
-The CSV files are for local use only and are ignored by Git.
-
 ## Doing your analysis
 
 Use the existing project folders:
 
 | What you are working on | Put it in |
 | --- | --- |
-| Lecturer-provided CSVs and other local datasets | `data/` |
+| Source, processed and deployment-ready datasets | `data/` |
 | EDA, modelling and analysis notebooks | `notebooks/` |
 | Reusable Python scripts | `src/` |
 | Streamlit, FastAPI, Gradio or Power BI deployment files | `deployment/` |
 | Reports, slides, references and other project documents | `docs/` |
 
-For most analysis work, you will mainly work inside `notebooks/` and read the local files from `data/raw/`.
+For most analysis work, you will mainly work inside `notebooks/` and read source files from `data/raw/`.
 
 ## What to upload to GitHub
 
-Upload your project work such as notebooks, Python scripts, reports, documentation and deployment files.
+Upload project files that are needed for collaboration, reproducibility, analysis or deployment. This can include notebooks, Python scripts, reports, documentation, deployment files and project data.
 
-**Do not upload or commit any project data files.**
+Data may be committed when it forms part of the project workflow, including:
 
-Everything under `data/` stays on your own computer. This includes raw, cleaned, processed, sampled and model-ready datasets. The repository `.gitignore` is already configured to ignore these files.
+- the lecturer-provided Olist source files under `data/raw/`
+- cleaned or processed datasets used by shared analysis
+- dashboard-ready datasets required by Streamlit or another deployed application
+- model-ready datasets when the team agrees they are useful for reproducibility
 
-Only README instruction files inside `data/` should be tracked.
+Keep original source files unchanged where practical. Do not overwrite the raw Olist CSVs with transformed data.
 
-Before committing, check that you are only uploading your work and not the dataset.
+Avoid committing disposable or unnecessary data artifacts such as duplicate exports, temporary files, cache files, ad hoc intermediate outputs or multiple copies of the same dataset. The repository `.gitignore` excludes common temporary data locations.
+
+Before committing, use `git status` to confirm that the files belong to the project workflow.
 
 ## Working with the team
 
