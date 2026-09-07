@@ -3,4 +3,6 @@
 # Add runtime packages here as the implementation develops.
 # Prefer pinned or bounded versions once the team confirms the working environment.
 
+pandas>=2.2,<3
+pyarrow>=16,<23
 streamlit>=1.38,<2
