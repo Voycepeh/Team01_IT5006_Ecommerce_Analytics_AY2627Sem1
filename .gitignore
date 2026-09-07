@@ -45,8 +45,8 @@ dist/
 *.temp
 ~$*
 
-# Project data stays local and is not committed to GitHub.
-data/**
-!data/README.md
-!data/**/
-!data/**/README.md
+# Project data may be committed when it is part of the reproducible
+# analysis or deployment workflow. Ignore only disposable local data artifacts.
+data/temp/
+data/cache/
+data/**/tmp/
