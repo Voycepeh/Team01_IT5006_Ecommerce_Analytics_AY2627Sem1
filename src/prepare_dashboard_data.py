@@ -358,6 +358,9 @@ def add_derived_fields(frame: pd.DataFrame) -> pd.DataFrame:
         & result["order_delivered_customer_date"].notna()
     )
     result["is_delivered_complete"] = delivered_complete
+    lateness_eligible = (
+        delivered_complete & result["order_estimated_delivery_date"].notna()
+    )
 
     delivery_days = (
         result["order_delivered_customer_date"] - result["purchase_timestamp"]
@@ -370,12 +373,12 @@ def add_derived_fields(frame: pd.DataFrame) -> pd.DataFrame:
     result["estimated_delivery_days"] = (
         result["order_estimated_delivery_date"] - result["purchase_timestamp"]
     ).dt.days.astype("Float64")
-    result["days_late"] = days_late.where(delivered_complete).astype("Float64")
+    result["days_late"] = days_late.where(lateness_eligible).astype("Float64")
 
     result["is_late"] = pd.Series(pd.NA, index=result.index, dtype="boolean")
-    result.loc[delivered_complete, "is_late"] = (
-        result.loc[delivered_complete, "order_delivered_customer_date"]
-        > result.loc[delivered_complete, "order_estimated_delivery_date"]
+    result.loc[lateness_eligible, "is_late"] = (
+        result.loc[lateness_eligible, "order_delivered_customer_date"]
+        > result.loc[lateness_eligible, "order_estimated_delivery_date"]
     )
     result["is_negative_review"] = pd.Series(
         pd.NA, index=result.index, dtype="boolean"
@@ -442,8 +445,14 @@ def validate_output(frame: pd.DataFrame, raw_orders: pd.DataFrame) -> int:
     complete = frame["is_delivered_complete"]
     if frame.loc[complete, "delivery_days"].isna().any():
         raise AssertionError("A complete delivered order is missing delivery_days")
-    if frame.loc[~complete, ["delivery_days", "days_late", "is_late"]].notna().any().any():
-        raise AssertionError("Undelivered or inconsistent orders have delivery outcomes")
+    if frame.loc[~complete, "delivery_days"].notna().any():
+        raise AssertionError("Undelivered or inconsistent orders have delivery_days")
+
+    lateness_eligible = complete & frame["order_estimated_delivery_date"].notna()
+    if frame.loc[lateness_eligible, ["days_late", "is_late"]].isna().any().any():
+        raise AssertionError("An eligible delivered order is missing a lateness outcome")
+    if frame.loc[~lateness_eligible, ["days_late", "is_late"]].notna().any().any():
+        raise AssertionError("An order without complete delivery dates has lateness outcomes")
     if (frame.loc[complete, "delivery_days"] < 0).any():
         raise AssertionError("A complete order has a delivery timestamp before purchase")
     if (frame["estimated_delivery_days"].dropna() < 0).any():
