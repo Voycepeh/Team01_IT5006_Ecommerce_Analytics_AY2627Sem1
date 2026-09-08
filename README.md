@@ -8,6 +8,20 @@ This project applies the data analytics workflow taught in IT5006 to an e-commer
 
 The project will include both classification and regression work and will keep the modelling scope focused in line with the course requirements.
 
+## Interactive dashboard
+
+Phase 1 Streamlit dashboard:
+
+https://team01-it5006-ecommerce.streamlit.app/
+
+Run locally:
+
+```bash
+streamlit run deployment/streamlit/app.py
+```
+
+The dashboard presents descriptive analysis of Olist orders, delivery performance, customer experience, products and geography.
+
 ## Repository structure
 
 ```text

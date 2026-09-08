@@ -4,9 +4,11 @@ Use this folder for deployment-related artefacts required by the IT5006 project,
 
 Do not place exploratory notebooks here.
 
-## Streamlit demo
+## Phase 1 Streamlit dashboard
 
-A simple fake-data Streamlit app is available at `deployment/streamlit/app.py`. It exists only to test the GitHub → Streamlit Community Cloud deployment flow before the Phase 1 EDA dashboard is built.
+The stakeholder-facing dashboard is available at `deployment/streamlit/app.py`. It
+presents Phase 1 descriptive and exploratory views of orders, delivery performance,
+customer experience, products, and geography. It does not include predictive modelling.
 
 ### Run locally
 
@@ -17,15 +19,16 @@ pip install -r requirements.txt
 streamlit run deployment/streamlit/app.py
 ```
 
+The app reads only the prepared, one-row-per-order analytical dataset at
+`data/processed/dashboard_orders.parquet`.
+
 ### Deploy on Streamlit Community Cloud
 
 1. Sign in to Streamlit Community Cloud with GitHub.
 2. Create a new app and select this repository.
-3. Select branch `main` after this demo is merged.
+3. Select branch `main` after the dashboard is merged.
 4. Set the main file path to `deployment/streamlit/app.py`.
 5. Deploy and copy the generated `.streamlit.app` URL.
-
-The demo uses fake data only and requires no secrets, configuration, or Olist dataset files.
 
 Any future deployment should document:
 
