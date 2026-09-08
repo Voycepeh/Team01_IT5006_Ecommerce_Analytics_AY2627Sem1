@@ -6,7 +6,7 @@ Do not place exploratory notebooks here.
 
 ## Phase 1 Streamlit dashboard
 
-The stakeholder-facing dashboard is available at `deployment/streamlit_app.py`. It
+The stakeholder-facing dashboard is available at `deployment/streamlit/app.py`. It
 presents Phase 1 descriptive and exploratory views of orders, delivery performance,
 customer experience, products, and geography. It does not include predictive modelling.
 
@@ -16,7 +16,7 @@ From the repository root:
 
 ```bash
 pip install -r requirements.txt
-streamlit run deployment/streamlit_app.py
+streamlit run deployment/streamlit/app.py
 ```
 
 The app reads only the prepared, one-row-per-order analytical dataset at
@@ -27,7 +27,7 @@ The app reads only the prepared, one-row-per-order analytical dataset at
 1. Sign in to Streamlit Community Cloud with GitHub.
 2. Create a new app and select this repository.
 3. Select branch `main` after the dashboard is merged.
-4. Set the main file path to `deployment/streamlit_app.py`.
+4. Set the main file path to `deployment/streamlit/app.py`.
 5. Deploy and copy the generated `.streamlit.app` URL.
 
 Any future deployment should document:
