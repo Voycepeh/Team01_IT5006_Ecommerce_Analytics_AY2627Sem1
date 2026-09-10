@@ -1,4 +1,4 @@
-"""Phase 1 stakeholder dashboard for the Olist e-commerce dataset."""
+"""Phase 1 stakeholder dashboard aligned to the Olist exploratory analysis."""
 
 from pathlib import Path
 
@@ -13,16 +13,20 @@ DATA_PATH = (
     / "processed"
     / "dashboard_orders.parquet"
 )
-PAGES = (
-    "Overview",
-    "Delivery Performance",
-    "Customer Experience",
-    "Product & Geography",
-)
-BLUE, ORANGE, GREEN, RED, GREY = "#2563EB", "#F97316", "#0F766E", "#DC2626", "#64748B"
+
+ANALYSIS_START = pd.Timestamp("2017-01-01")
+ANALYSIS_END = pd.Timestamp("2018-08-31")
+
+BLUE = "#2563EB"
+ORANGE = "#F97316"
+GREEN = "#0F766E"
+RED = "#DC2626"
+GREY = "#64748B"
 
 st.set_page_config(
-    page_title="Olist E-commerce Performance", page_icon="📦", layout="wide"
+    page_title="Olist E-commerce Analytics",
+    page_icon="📦",
+    layout="wide",
 )
 
 
@@ -36,10 +40,10 @@ def load_data(path: str) -> pd.DataFrame:
         "purchase_date",
         "order_status",
         "customer_state",
+        "customer_city",
         "seller_state",
         "product_category",
         "total_item_value",
-        "total_payment_value",
         "review_score",
         "delivery_days",
         "estimated_delivery_days",
@@ -53,8 +57,16 @@ def load_data(path: str) -> pd.DataFrame:
         raise ValueError(
             f"Dashboard dataset is missing required columns: {sorted(missing)}"
         )
+
     frame = frame.copy()
     frame["purchase_date"] = pd.to_datetime(frame["purchase_date"], errors="coerce")
+    frame["route_type"] = pd.NA
+    has_route = frame["customer_state"].notna() & frame["seller_state"].notna()
+    frame.loc[has_route, "route_type"] = (
+        frame.loc[has_route, "customer_state"]
+        .eq(frame.loc[has_route, "seller_state"])
+        .map({True: "Same state", False: "Cross state"})
+    )
     return frame
 
 
@@ -63,21 +75,36 @@ def options(series: pd.Series) -> list[str]:
 
 
 def apply_filters(
-    frame, date_range, customer_states, seller_states, categories, statuses
-):
-    """Apply all global filters with AND logic."""
+    frame: pd.DataFrame,
+    date_range,
+    customer_states,
+    customer_cities,
+    seller_states,
+    route_types,
+    categories,
+    statuses,
+) -> pd.DataFrame:
+    """Apply dashboard filters with AND logic."""
     result = frame
+
     if len(date_range) == 2:
-        start, end = pd.Timestamp(date_range[0]), pd.Timestamp(date_range[1])
+        start = pd.Timestamp(date_range[0])
+        end = pd.Timestamp(date_range[1]) + pd.Timedelta(days=1) - pd.Timedelta(
+            microseconds=1
+        )
         result = result[result["purchase_date"].between(start, end)]
+
     for column, selected in (
         ("customer_state", customer_states),
+        ("customer_city", customer_cities),
         ("seller_state", seller_states),
+        ("route_type", route_types),
         ("product_category", categories),
         ("order_status", statuses),
     ):
         if selected:
             result = result[result[column].isin(selected)]
+
     return result.copy()
 
 
@@ -99,7 +126,7 @@ def percent(value: float) -> str:
     return "—" if pd.isna(value) else f"{value:.1%}"
 
 
-def styled(figure: go.Figure, height: int = 380) -> go.Figure:
+def styled(figure: go.Figure, height: int = 390) -> go.Figure:
     figure.update_layout(
         template="plotly_white",
         height=height,
@@ -114,178 +141,300 @@ def chart(figure: go.Figure, key: str) -> None:
     st.plotly_chart(figure, use_container_width=True, key=key)
 
 
-def order_counts(frame: pd.DataFrame, column: str, label: str) -> pd.DataFrame:
-    return (
-        frame.dropna(subset=[column])
-        .groupby(column, observed=True)["order_id"]
-        .nunique()
-        .rename("Orders")
-        .reset_index()
-        .rename(columns={column: label})
+def add_bar_labels(
+    figure: go.Figure,
+    *,
+    value_format: str = ",.0f",
+    position: str = "auto",
+) -> go.Figure:
+    """Add readable direct labels to vertical bar traces."""
+    figure.update_traces(
+        texttemplate=f"%{{y:{value_format}}}",
+        textposition=position,
+        selector={"type": "bar"},
     )
+    return figure
 
 
-def rates(frame, dimension, flag, label, minimum_orders=1):
-    eligible = frame.dropna(subset=[dimension, flag])
-    if eligible.empty:
-        return pd.DataFrame(columns=[label, "Rate", "Eligible orders"])
-    result = (
-        eligible.groupby(dimension, observed=True)
-        .agg(Rate=(flag, "mean"), **{"Eligible orders": ("order_id", "nunique")})
-        .reset_index()
-        .rename(columns={dimension: label})
-    )
-    return result[result["Eligible orders"] >= minimum_orders]
-
-
-def overview(frame: pd.DataFrame) -> None:
-    st.header("Overview")
-    st.caption("What is happening in the Olist e-commerce business?")
-    reviewed, lateness = frame["review_score"].dropna(), frame["is_late"].dropna()
-    cols = st.columns(6)
-    cols[0].metric("Orders", f"{frame['order_id'].nunique():,}")
-    cols[1].metric("Unique customers", f"{frame['customer_unique_id'].nunique():,}")
-    cols[2].metric(
-        "Total item value", money(frame["total_item_value"].sum(min_count=1))
-    )
-    cols[3].metric("Avg. order value", money(frame["total_item_value"].mean()))
-    cols[4].metric("Avg. review score", number(reviewed.mean(), 2))
-    cols[5].metric("Late-delivery rate", percent(lateness.mean()))
-
-    left, right = st.columns(2)
-    with left:
-        monthly = (
-            frame.assign(
-                Month=frame["purchase_date"].dt.to_period("M").dt.to_timestamp()
-            )
-            .groupby("Month", as_index=False)
-            .agg(Orders=("order_id", "nunique"))
-        )
-        fig = px.line(
-            monthly, x="Month", y="Orders", markers=True, title="Monthly order trend"
-        )
-        fig.update_traces(line_color=BLUE)
-        chart(styled(fig), "overview-orders")
-    with right:
-        monthly_value = (
-            frame.dropna(subset=["total_payment_value"])
-            .assign(
-                Month=lambda x: x["purchase_date"].dt.to_period("M").dt.to_timestamp()
-            )
-            .groupby("Month", as_index=False)["total_payment_value"]
-            .sum()
-            .rename(columns={"total_payment_value": "Payment value"})
-        )
-        if monthly_value.empty:
-            st.info("No payment values match the current filters.")
-        else:
-            fig = px.area(
-                monthly_value,
-                x="Month",
-                y="Payment value",
-                title="Monthly payment value",
-            )
-            fig.update_traces(line_color=GREEN, fillcolor="rgba(15,118,110,0.22)")
-            fig.update_yaxes(tickprefix="R$", tickformat="~s")
-            chart(styled(fig), "overview-payments")
-
-    left, right = st.columns(2)
-    with left:
-        review_dist = (
-            frame.dropna(subset=["review_score"])
-            .groupby("review_score", as_index=False)["order_id"]
-            .nunique()
-            .rename(columns={"review_score": "Review score", "order_id": "Orders"})
-        )
-        if review_dist.empty:
-            st.info("No reviews match the current filters.")
-        else:
-            fig = px.bar(
-                review_dist,
-                x="Review score",
-                y="Orders",
-                title="Review score distribution",
-                color_discrete_sequence=[BLUE],
-            )
-            fig.update_xaxes(dtick=1)
-            chart(styled(fig), "overview-reviews")
-    with right:
-        category = order_counts(frame, "product_category", "Primary category").nlargest(
-            10, "Orders"
-        )
-        if category.empty:
-            st.info("No primary product categories match the current filters.")
-        else:
-            fig = px.bar(
-                category.sort_values("Orders"),
-                x="Orders",
-                y="Primary category",
-                orientation="h",
-                title="Top primary product categories by orders",
-                color_discrete_sequence=[ORANGE],
-            )
-            chart(styled(fig), "overview-categories")
-
-    states = order_counts(frame, "customer_state", "Customer state").sort_values(
-        "Orders", ascending=False
-    )
-    fig = px.bar(
-        states,
-        x="Customer state",
-        y="Orders",
-        title="Customer orders by state",
-        color="Orders",
-        color_continuous_scale="Blues",
-    )
-    fig.update_layout(coloraxis_showscale=False)
-    chart(styled(fig), "overview-states")
-
-
-def delivery(frame: pd.DataFrame) -> None:
-    st.header("Delivery Performance")
-    st.caption(
-        "How long do deliveries take, and where does Olist miss its promised date?"
-    )
-    st.info(
-        "Days late compares actual delivery with the estimated date: negative values mean early; "
-        "positive values mean after the estimate. Missing delivery/lateness outcomes are excluded."
-    )
-    valid = frame[
+def delivered_orders(frame: pd.DataFrame) -> pd.DataFrame:
+    return frame[
         frame["is_delivered_complete"]
         & frame["delivery_days"].notna()
+        & frame["estimated_delivery_days"].notna()
         & frame["days_late"].notna()
         & frame["is_late"].notna()
     ].copy()
-    cols = st.columns(4)
-    cols[0].metric("Eligible delivered orders", f"{valid['order_id'].nunique():,}")
-    cols[1].metric("Median delivery days", number(valid["delivery_days"].median()))
-    cols[2].metric(
-        "Median quoted days", number(valid["estimated_delivery_days"].median())
+
+
+def page_insight(text: str) -> None:
+    st.info(f"**What stands out:** {text}")
+
+
+def pareto_chart(frame: pd.DataFrame) -> None:
+    """Interactive category Pareto chart for business contribution."""
+    st.subheader("Category contribution")
+    metric = st.radio(
+        "Pareto measure",
+        ("Orders", "GMV"),
+        horizontal=True,
+        key="pareto-measure",
+        help="Switch the Pareto view between order volume and gross merchandise value.",
     )
-    cols[3].metric("Late-order rate", percent(valid["is_late"].mean()))
-    if valid.empty:
-        st.info("No orders with valid delivery outcomes match the current filters.")
+
+    base = frame.dropna(subset=["product_category"]).copy()
+    if base.empty:
+        st.info("No product categories match the current filters.")
         return
+
+    if metric == "Orders":
+        pareto = (
+            base.groupby("product_category", observed=True)["order_id"]
+            .nunique()
+            .rename("Value")
+            .sort_values(ascending=False)
+            .reset_index()
+        )
+        axis_title = "Orders"
+        text_template = "%{text:,.0f}"
+        hover_template = "%{x}<br>Orders: %{y:,.0f}<extra></extra>"
+    else:
+        pareto = (
+            base.dropna(subset=["total_item_value"])
+            .groupby("product_category", observed=True)["total_item_value"]
+            .sum()
+            .rename("Value")
+            .sort_values(ascending=False)
+            .reset_index()
+        )
+        axis_title = "GMV (R$)"
+        text_template = "R$%{text:,.0f}"
+        hover_template = "%{x}<br>GMV: R$%{y:,.0f}<extra></extra>"
+
+    total_value = pareto["Value"].sum()
+    top_ten = pareto.head(10).copy()
+    others_value = pareto.iloc[10:]["Value"].sum()
+    if others_value > 0:
+        top_ten = pd.concat(
+            [
+                top_ten,
+                pd.DataFrame(
+                    {"product_category": ["Others"], "Value": [others_value]}
+                ),
+            ],
+            ignore_index=True,
+        )
+
+    pareto_display = top_ten
+    pareto_display["Cumulative share"] = (
+        pareto_display["Value"].cumsum() / total_value
+    )
+
+    fig = go.Figure()
+    fig.add_trace(
+        go.Bar(
+            x=pareto_display["product_category"],
+            y=pareto_display["Value"],
+            name=axis_title,
+            marker_color=BLUE,
+            text=pareto_display["Value"],
+            texttemplate=text_template,
+            textposition="outside",
+            hovertemplate=hover_template,
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=pareto_display["product_category"],
+            y=pareto_display["Cumulative share"],
+            name="Cumulative share",
+            mode="lines+markers",
+            yaxis="y2",
+            line={"color": ORANGE, "width": 3},
+            hovertemplate="%{x}<br>Cumulative share: %{y:.1%}<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        yaxis={"title": axis_title, "tickformat": ","},
+        yaxis2={
+            "title": "Cumulative share",
+            "overlaying": "y",
+            "side": "right",
+            "tickformat": ".0%",
+            "range": [0, 1.08],
+        },
+        xaxis={"title": "", "tickangle": -35},
+        title=f"Top 10 product categories + Others by {metric.lower()}",
+    )
+    chart(styled(fig, 500), "overview-pareto")
+    st.caption(
+        "The Pareto view keeps the 10 largest categories visible and combines the remaining long tail into Others. "
+        "The cumulative line is calculated against the full selected population, so the final point reaches 100%."
+    )
+
+
+def business_overview(frame: pd.DataFrame) -> None:
+    st.header("Business Overview")
+    st.caption(
+        "Use the filters to compare how order volume, basket value, and category contribution change across segments."
+    )
+
+    reviewed = frame["review_score"].dropna()
+
+    monthly = (
+        frame.assign(Month=frame["purchase_date"].dt.to_period("M").dt.to_timestamp())
+        .groupby("Month", as_index=False)
+        .agg(
+            Orders=("order_id", "nunique"),
+            AOV=("total_item_value", "mean"),
+        )
+        .sort_values("Month")
+    )
+
+    if len(monthly) >= 2 and monthly.iloc[0]["Orders"] > 0 and monthly.iloc[0]["AOV"] > 0:
+        order_change = monthly.iloc[-1]["Orders"] / monthly.iloc[0]["Orders"] - 1
+        aov_change = monthly.iloc[-1]["AOV"] / monthly.iloc[0]["AOV"] - 1
+        page_insight(
+            f"From the first to last selected month, order volume changed by "
+            f"{order_change:+.0%}, while average order value changed by {aov_change:+.0%}. "
+            "This supports the EDA's volume-versus-basket comparison without assuming why volume changed."
+        )
+    else:
+        page_insight(
+            "The selected filters leave too little monthly history for a reliable first-versus-last comparison."
+        )
+
+    cols = st.columns(5)
+    cols[0].metric("Orders", f"{frame['order_id'].nunique():,}")
+    cols[1].metric("Unique customers", f"{frame['customer_unique_id'].nunique():,}")
+    cols[2].metric(
+        "Gross merchandise value",
+        money(frame["total_item_value"].sum(min_count=1)),
+        help="Sum of item prices, excluding freight. This is GMV, not Olist revenue.",
+    )
+    cols[3].metric("Average order value", money(frame["total_item_value"].mean()))
+    cols[4].metric("Average review score", number(reviewed.mean(), 2))
+
+    if monthly.empty:
+        st.info("No monthly observations match the current filters.")
+        return
+
+    indexed = monthly.dropna(subset=["Orders", "AOV"]).copy()
+    if not indexed.empty and indexed.iloc[0]["Orders"] > 0 and indexed.iloc[0]["AOV"] > 0:
+        indexed["Order volume index"] = indexed["Orders"] / indexed.iloc[0]["Orders"] * 100
+        indexed["AOV index"] = indexed["AOV"] / indexed.iloc[0]["AOV"] * 100
+        indexed_long = indexed.melt(
+            id_vars="Month",
+            value_vars=["Order volume index", "AOV index"],
+            var_name="Measure",
+            value_name="Index",
+        )
+        fig = px.line(
+            indexed_long,
+            x="Month",
+            y="Index",
+            color="Measure",
+            markers=True,
+            title="Order volume and average order value, indexed to first selected month = 100",
+            color_discrete_map={
+                "Order volume index": BLUE,
+                "AOV index": ORANGE,
+            },
+        )
+        fig.add_hline(y=100, line_dash="dash", line_color=GREY)
+        fig.update_yaxes(tickformat=",.0f")
+        chart(styled(fig, 430), "overview-indexed-growth")
 
     left, right = st.columns(2)
     with left:
-        upper = max(float(valid["delivery_days"].quantile(0.99)), 1)
-        fig = px.histogram(
-            valid[valid["delivery_days"] <= upper],
-            x="delivery_days",
-            nbins=35,
-            title="Delivery duration distribution (up to 99th percentile)",
-            labels={"delivery_days": "Delivery days"},
+        orders_fig = px.bar(
+            monthly,
+            x="Month",
+            y="Orders",
+            title="Monthly order volume",
             color_discrete_sequence=[BLUE],
         )
-        fig.update_yaxes(title="Orders")
-        chart(styled(fig), "delivery-duration")
+        orders_fig.update_yaxes(tickformat=",")
+        add_bar_labels(orders_fig)
+        chart(styled(orders_fig), "overview-orders")
+
     with right:
-        quote = valid.groupby("estimated_delivery_days", as_index=False).agg(
-            **{
-                "Median actual delivery days": ("delivery_days", "median"),
-                "Orders": ("order_id", "nunique"),
-            }
+        aov_fig = px.line(
+            monthly,
+            x="Month",
+            y="AOV",
+            markers=True,
+            title="Monthly average order value",
+            color_discrete_sequence=[ORANGE],
+        )
+        aov_fig.update_yaxes(tickprefix="R$", tickformat=",.0f")
+        aov_fig.update_traces(
+            mode="lines+markers+text",
+            text=monthly["AOV"],
+            texttemplate="R$%{text:,.0f}",
+            textposition="top center",
+        )
+        chart(styled(aov_fig), "overview-aov")
+
+    pareto_chart(frame)
+
+
+def delivery_promise(frame: pd.DataFrame) -> None:
+    st.header("Delivery Promise")
+    st.caption(
+        "Explore how the checkout promise compares with actual delivery across the selected customer, seller, route, and product segments."
+    )
+
+    valid = delivered_orders(frame)
+    if valid.empty:
+        st.info(
+            "No delivered orders with valid quote and delivery timestamps match the filters."
+        )
+        return
+
+    valid["days_early"] = -valid["days_late"].astype(float)
+    quote_mae = valid["days_early"].abs().mean()
+    median_actual = valid["delivery_days"].median()
+    median_quote = valid["estimated_delivery_days"].median()
+    median_early = valid["days_early"].median()
+
+    if median_early >= 0:
+        arrival_phrase = f"{median_early:,.0f} days earlier than promised"
+    else:
+        arrival_phrase = f"{abs(median_early):,.0f} days later than promised"
+
+    page_insight(
+        f"The median selected order was delivered in {median_actual:,.0f} days versus a "
+        f"{median_quote:,.0f}-day quoted duration, arriving {arrival_phrase}. "
+        "The comparison is descriptive of Olist's incumbent quote, not evidence of a replacement model."
+    )
+
+    cols = st.columns(4)
+    cols[0].metric("Median actual delivery", f"{number(median_actual, 0)} days")
+    cols[1].metric("Median quoted delivery", f"{number(median_quote, 0)} days")
+    cols[2].metric(
+        "Median arrival vs promise",
+        f"{number(median_early, 0)} days early"
+        if median_early >= 0
+        else f"{number(abs(median_early), 0)} days late",
+        help="Positive days-early values mean the order arrived before the estimated delivery date.",
+    )
+    cols[3].metric(
+        "Current quote MAE",
+        f"{number(quote_mae, 1)} days",
+        help="Mean absolute error of the existing Olist delivery promise against actual delivery.",
+    )
+
+    left, right = st.columns(2)
+
+    with left:
+        quote = (
+            valid.groupby("estimated_delivery_days", as_index=False)
+            .agg(
+                **{
+                    "Median actual delivery days": ("delivery_days", "median"),
+                    "Orders": ("order_id", "nunique"),
+                }
+            )
         )
         fig = px.scatter(
             quote,
@@ -293,8 +442,9 @@ def delivery(frame: pd.DataFrame) -> None:
             y="Median actual delivery days",
             size="Orders",
             labels={"estimated_delivery_days": "Quoted delivery days"},
-            title="Estimated vs actual delivery duration",
+            title="Quoted versus actual delivery duration",
             color_discrete_sequence=[ORANGE],
+            hover_data={"Orders": ":,"},
         )
         axis_max = max(
             float(quote["estimated_delivery_days"].max()),
@@ -309,375 +459,408 @@ def delivery(frame: pd.DataFrame) -> None:
                 line={"color": GREY, "dash": "dash"},
             )
         )
-        chart(styled(fig), "delivery-quote")
+        chart(styled(fig, 430), "promise-quoted-actual")
 
-    left, right = st.columns(2)
-    with left:
-        monthly = (
-            valid.assign(
-                Month=valid["purchase_date"].dt.to_period("M").dt.to_timestamp()
-            )
-            .groupby("Month", as_index=False)
+    with right:
+        bins = [-999, -30, -15, -7, -3, 0, 3, 7, 15, 999]
+        labels = [
+            "30+ late",
+            "15–30 late",
+            "7–15 late",
+            "3–7 late",
+            "0–3 late",
+            "0–3 early",
+            "3–7 early",
+            "7–15 early",
+            "15+ early",
+        ]
+        valid["Delivery timing"] = pd.cut(
+            valid["days_early"], bins=bins, labels=labels, ordered=True
+        )
+        timing_counts = (
+            valid.dropna(subset=["Delivery timing"])
+            .groupby("Delivery timing", observed=False)["order_id"]
+            .nunique()
+            .rename("Orders")
+            .reset_index()
+        )
+        timing_counts["Delivery timing"] = timing_counts["Delivery timing"].astype(str)
+        fig = px.bar(
+            timing_counts,
+            x="Delivery timing",
+            y="Orders",
+            title="Orders by delivery timing relative to the promise",
+            color_discrete_sequence=[BLUE],
+        )
+        fig.update_yaxes(tickformat=",")
+        add_bar_labels(fig)
+        chart(styled(fig, 430), "promise-timing-counts")
+
+    st.caption(
+        f"Delivery metrics use {valid['order_id'].nunique():,} completed delivered orders "
+        "with valid delivery and estimated-delivery timestamps under the current filters."
+    )
+
+
+def delivery_heatmap(valid: pd.DataFrame) -> None:
+    st.subheader("Route heatmap")
+    st.caption(
+        "Cross-compare customer and seller states. Cells with too few eligible orders are omitted to reduce unstable rates."
+    )
+
+    metric = st.radio(
+        "Heatmap measure",
+        ("Late delivery rate", "Median delivery days"),
+        horizontal=True,
+        key="heatmap-measure",
+    )
+    minimum_orders = st.slider(
+        "Minimum eligible orders per state pair",
+        min_value=10,
+        max_value=200,
+        value=50,
+        step=10,
+        key="heatmap-minimum",
+    )
+
+    geography = valid.dropna(subset=["customer_state", "seller_state"]).copy()
+    if geography.empty:
+        st.info("No customer/seller geography is available under the current filters.")
+        return
+
+    grouped = (
+        geography.groupby(["customer_state", "seller_state"], observed=True)
+        .agg(
+            eligible_orders=("order_id", "nunique"),
+            late_rate=("is_late", "mean"),
+            median_delivery_days=("delivery_days", "median"),
+        )
+        .reset_index()
+    )
+    grouped = grouped[grouped["eligible_orders"] >= minimum_orders]
+
+    if grouped.empty:
+        st.info(
+            "No customer/seller state pair meets the current minimum-order threshold."
+        )
+        return
+
+    if metric == "Late delivery rate":
+        value_col = "late_rate"
+        fmt = ".1%"
+        texttemplate = "%{z:.1%}"
+        color_scale = "OrRd"
+    else:
+        value_col = "median_delivery_days"
+        fmt = ".1f"
+        texttemplate = "%{z:.1f}"
+        color_scale = "Blues"
+
+    pivot = grouped.pivot(
+        index="customer_state",
+        columns="seller_state",
+        values=value_col,
+    )
+    counts = grouped.pivot(
+        index="customer_state",
+        columns="seller_state",
+        values="eligible_orders",
+    )
+
+    fig = go.Figure(
+        data=go.Heatmap(
+            z=pivot.values,
+            x=pivot.columns.tolist(),
+            y=pivot.index.tolist(),
+            colorscale=color_scale,
+            colorbar={"title": metric},
+            customdata=counts.reindex(index=pivot.index, columns=pivot.columns).values,
+            texttemplate=texttemplate,
+            hovertemplate=(
+                "Customer state: %{y}<br>"
+                "Seller state: %{x}<br>"
+                + metric
+                + f": %{{z:{fmt}}}<br>"
+                "Eligible orders: %{customdata:,.0f}<extra></extra>"
+            ),
+        )
+    )
+    fig.update_layout(
+        title=f"{metric} by customer state × seller state",
+        xaxis_title="Seller state",
+        yaxis_title="Customer state",
+    )
+    chart(styled(fig, 610), "experience-route-heatmap")
+
+
+def delivery_experience(frame: pd.DataFrame) -> None:
+    st.header("Delivery & Customer Experience")
+    st.caption(
+        "Compare delivery timing, review outcomes, and route geography across the same interactive filter context."
+    )
+
+    valid = delivered_orders(frame)
+    reviewed = valid.dropna(subset=["review_score", "is_negative_review"]).copy()
+
+    if reviewed.empty:
+        st.info("No reviewed orders with valid delivery outcomes match the filters.")
+        return
+
+    reviewed["days_early"] = -reviewed["days_late"].astype(float)
+    bins = [-999, -30, -15, -7, -3, 0, 3, 7, 15, 999]
+    labels = [
+        "30+ late",
+        "15–30 late",
+        "7–15 late",
+        "3–7 late",
+        "0–3 late",
+        "0–3 early",
+        "3–7 early",
+        "7–15 early",
+        "15+ early",
+    ]
+    reviewed["Delivery timing"] = pd.cut(
+        reviewed["days_early"],
+        bins=bins,
+        labels=labels,
+        ordered=True,
+    )
+
+    timing = (
+        reviewed.dropna(subset=["Delivery timing"])
+        .groupby("Delivery timing", observed=False, as_index=False)
+        .agg(
+            **{
+                "Average review score": ("review_score", "mean"),
+                "Negative review rate": ("is_negative_review", "mean"),
+                "Reviewed orders": ("order_id", "nunique"),
+            }
+        )
+    )
+
+    score_0_3 = timing.loc[
+        timing["Delivery timing"].astype(str).eq("0–3 late"), "Average review score"
+    ]
+    score_3_7 = timing.loc[
+        timing["Delivery timing"].astype(str).eq("3–7 late"), "Average review score"
+    ]
+
+    if not score_0_3.empty and not score_3_7.empty:
+        page_insight(
+            f"Average review score is {score_0_3.iloc[0]:.2f} for orders up to 3 days late "
+            f"and {score_3_7.iloc[0]:.2f} for orders 3–7 days late under the current filters. "
+            "The dashboard shows an association between delivery timing and reviews; it does not establish causality."
+        )
+    else:
+        page_insight(
+            "The selected filters leave too few observations in the key lateness bands for a useful comparison."
+        )
+
+    cols = st.columns(3)
+    cols[0].metric("Reviewed delivered orders", f"{reviewed['order_id'].nunique():,}")
+    cols[1].metric("Average review score", number(reviewed["review_score"].mean(), 2))
+    cols[2].metric("Negative review rate", percent(reviewed["is_negative_review"].mean()))
+
+    display_order = list(reversed(labels))
+    timing["Delivery timing"] = pd.Categorical(
+        timing["Delivery timing"].astype(str),
+        categories=display_order,
+        ordered=True,
+    )
+    timing = timing.sort_values("Delivery timing")
+
+    fig = px.bar(
+        timing,
+        x="Delivery timing",
+        y="Average review score",
+        hover_data={
+            "Negative review rate": ":.1%",
+            "Reviewed orders": ":,",
+        },
+        title="Review score by delivery timing relative to the promise",
+        color="Average review score",
+        color_continuous_scale="RdYlGn",
+        text="Reviewed orders",
+    )
+    fig.update_traces(
+        texttemplate="%{y:.2f}<br>n=%{text:,.0f}",
+        textposition="outside",
+    )
+    fig.update_yaxes(range=[1, 5.4])
+    fig.update_layout(coloraxis_showscale=False)
+    chart(styled(fig, 460), "experience-timing")
+
+    geography = valid.dropna(subset=["route_type"]).copy()
+    if not geography.empty:
+        route = (
+            geography.groupby("route_type", as_index=False)
             .agg(
                 **{
-                    "Late-delivery rate": ("is_late", "mean"),
+                    "Median delivery days": ("delivery_days", "median"),
+                    "Late delivery rate": ("is_late", "mean"),
                     "Eligible orders": ("order_id", "nunique"),
                 }
             )
+            .rename(columns={"route_type": "Route"})
         )
-        fig = px.line(
-            monthly,
-            x="Month",
-            y="Late-delivery rate",
-            markers=True,
-            title="Late-delivery rate over time",
-        )
-        fig.update_traces(line_color=RED)
-        fig.update_yaxes(tickformat=".0%")
-        chart(styled(fig), "delivery-time")
-    with right:
-        state = rates(valid, "customer_state", "is_late", "Customer state").sort_values(
-            "Rate"
-        )
-        fig = px.bar(
-            state,
-            x="Rate",
-            y="Customer state",
-            orientation="h",
-            hover_data=["Eligible orders"],
-            title="Late-delivery rate by customer state",
-            color="Rate",
-            color_continuous_scale="OrRd",
-        )
-        fig.update_xaxes(tickformat=".0%")
-        fig.update_layout(coloraxis_showscale=False)
-        chart(styled(fig, 500), "delivery-state")
 
-    category = rates(
-        valid, "product_category", "is_late", "Primary category", 100
-    ).nlargest(15, "Rate")
-    if category.empty:
-        st.info(
-            "No primary categories have at least 100 eligible delivered orders under these filters."
-        )
-    else:
-        fig = px.bar(
-            category.sort_values("Rate"),
-            x="Rate",
-            y="Primary category",
-            orientation="h",
-            hover_data=["Eligible orders"],
-            title="Highest late-delivery rates by primary category (100+ eligible orders)",
-            color_discrete_sequence=[RED],
-        )
-        fig.update_xaxes(tickformat=".0%")
-        chart(styled(fig, 480), "delivery-category")
-
-
-def lateness_groups(frame: pd.DataFrame) -> pd.DataFrame:
-    result = frame.copy()
-    result["Lateness group"] = pd.cut(
-        result["days_late"],
-        bins=[-float("inf"), -1, 0, 2, 5, 10, float("inf")],
-        labels=[
-            "Early",
-            "On time",
-            "1–2 days late",
-            "3–5 days late",
-            "6–10 days late",
-            "10+ days late",
-        ],
-        ordered=True,
-    )
-    return result
-
-
-def customer_experience(frame: pd.DataFrame) -> None:
-    st.header("Customer Experience")
-    st.caption(
-        "How strongly is customer feedback associated with delivery performance?"
-    )
-    reviewed = frame.dropna(subset=["review_score", "is_negative_review"]).copy()
-    linked = lateness_groups(reviewed.dropna(subset=["days_late", "is_late"]))
-    cols = st.columns(4)
-    cols[0].metric("Reviewed orders", f"{reviewed['order_id'].nunique():,}")
-    cols[1].metric("Average review score", number(reviewed["review_score"].mean(), 2))
-    cols[2].metric(
-        "Negative-review rate", percent(reviewed["is_negative_review"].mean())
-    )
-    cols[3].metric("Delivery-linked reviews", f"{linked['order_id'].nunique():,}")
-
-    left, right = st.columns(2)
-    with left:
-        dist = (
-            reviewed.groupby("review_score", as_index=False)["order_id"]
-            .nunique()
-            .rename(columns={"review_score": "Review score", "order_id": "Orders"})
-        )
-        if dist.empty:
-            st.info("No reviews match the current filters.")
-        else:
+        left, right = st.columns(2)
+        with left:
             fig = px.bar(
-                dist,
-                x="Review score",
-                y="Orders",
-                title="Review score distribution",
-                color_discrete_sequence=[BLUE],
+                route,
+                x="Route",
+                y="Median delivery days",
+                hover_data={"Eligible orders": ":,"},
+                title="Median delivery time by route type",
+                color="Route",
+                color_discrete_map={"Same state": GREEN, "Cross state": ORANGE},
             )
-            fig.update_xaxes(dtick=1)
-            chart(styled(fig), "experience-reviews")
-    with right:
-        comparison = (
-            linked.assign(
-                **{
-                    "Delivery outcome": linked["is_late"].map(
-                        {False: "Not late", True: "Late"}
-                    )
-                }
-            )
-            .groupby("Delivery outcome", observed=True, as_index=False)
-            .agg(
-                **{
-                    "Negative-review rate": ("is_negative_review", "mean"),
-                    "Reviewed orders": ("order_id", "nunique"),
-                }
-            )
-        )
-        if comparison.empty:
-            st.info(
-                "No reviews with valid delivery outcomes match the current filters."
-            )
-        else:
+            add_bar_labels(fig, value_format=",.1f")
+            chart(styled(fig), "experience-route-days")
+
+        with right:
             fig = px.bar(
-                comparison,
-                x="Delivery outcome",
-                y="Negative-review rate",
-                color="Delivery outcome",
-                hover_data=["Reviewed orders"],
-                title="Negative reviews: late vs not late deliveries",
-                color_discrete_map={"Not late": GREEN, "Late": RED},
+                route,
+                x="Route",
+                y="Late delivery rate",
+                hover_data={"Eligible orders": ":,"},
+                title="Late delivery rate by route type",
+                color="Route",
+                color_discrete_map={"Same state": GREEN, "Cross state": RED},
             )
+            fig.update_traces(texttemplate="%{y:.1%}", textposition="outside")
             fig.update_yaxes(tickformat=".0%")
-            chart(styled(fig), "experience-late")
+            chart(styled(fig), "experience-route-late")
 
-    if linked.empty:
-        st.info("No reviews with valid lateness outcomes match the current filters.")
-    else:
-        severity = (
-            linked.dropna(subset=["Lateness group"])
-            .groupby("Lateness group", observed=False, as_index=False)
-            .agg(
-                **{
-                    "Negative-review rate": ("is_negative_review", "mean"),
-                    "Average review score": ("review_score", "mean"),
-                    "Reviewed orders": ("order_id", "nunique"),
-                }
-            )
-        )
-        fig = px.bar(
-            severity,
-            x="Lateness group",
-            y="Negative-review rate",
-            color="Negative-review rate",
-            hover_data={"Average review score": ":.2f", "Reviewed orders": True},
-            title="Negative-review rate rises with delivery delay",
-            color_continuous_scale="OrRd",
-        )
-        fig.update_yaxes(tickformat=".0%")
-        fig.update_layout(coloraxis_showscale=False)
-        chart(styled(fig), "experience-severity")
-        st.caption(
-            "Negative review means a score of 1–2. Lateness uses whole-day differences: Early is below 0, "
-            "On time is 0, and positive values are days after the estimate. Missing outcomes are excluded."
-        )
+    delivery_heatmap(valid)
 
-
-def product_geography(frame: pd.DataFrame) -> None:
-    st.header("Product & Geography")
     st.caption(
-        "Where do order activity, value, delivery performance, and reviews differ?"
+        "These views are descriptive associations, not causal estimates. Seller state is the "
+        "dominant seller state for an order, so multi-seller orders are simplified for route comparisons."
     )
-    st.caption(
-        "Product category is the primary (dominant) category per order. Category value charts group whole-order "
-        "item value by that category; they are not exact item-level category revenue."
+
+
+def render_filters(data: pd.DataFrame):
+    minimum = data["purchase_date"].min().date()
+    maximum = data["purchase_date"].max().date()
+    default_start = max(ANALYSIS_START.date(), minimum)
+    default_end = min(ANALYSIS_END.date(), maximum)
+
+    st.sidebar.header("Explore the data")
+    st.sidebar.caption(
+        "Search within each multi-select. Leave a selector empty to include all values."
     )
-    left, right = st.columns(2)
-    with left:
-        category = order_counts(frame, "product_category", "Primary category").nlargest(
-            12, "Orders"
-        )
-        if category.empty:
-            st.info("No primary categories match the current filters.")
-        else:
-            fig = px.bar(
-                category.sort_values("Orders"),
-                x="Orders",
-                y="Primary category",
-                orientation="h",
-                title="Top primary categories by order count",
-                color_discrete_sequence=[BLUE],
-            )
-            chart(styled(fig, 430), "product-orders")
-    with right:
-        values = (
-            frame.dropna(subset=["product_category", "total_item_value"])
-            .groupby("product_category", observed=True)["total_item_value"]
-            .sum()
-            .rename("Order item value")
-            .nlargest(12)
-            .reset_index()
-            .rename(columns={"product_category": "Primary category"})
-        )
-        if values.empty:
-            st.info("No category item values match the current filters.")
-        else:
-            fig = px.bar(
-                values.sort_values("Order item value"),
-                x="Order item value",
-                y="Primary category",
-                orientation="h",
-                title="Order item value by primary category",
-                color_discrete_sequence=[ORANGE],
-            )
-            fig.update_xaxes(tickprefix="R$", tickformat="~s")
-            chart(styled(fig, 430), "product-values")
 
-    left, right = st.columns(2)
-    with left:
-        state = order_counts(frame, "customer_state", "Customer state").sort_values(
-            "Orders"
+    with st.sidebar.expander("Time", expanded=True):
+        date_range = st.date_input(
+            "Purchase date",
+            value=(default_start, default_end),
+            min_value=minimum,
+            max_value=maximum,
+            help="Defaults to the EDA analysis window: Jan 2017 to Aug 2018.",
         )
-        fig = px.bar(
-            state,
-            x="Orders",
-            y="Customer state",
-            orientation="h",
-            title="Customer orders by state",
-            color_discrete_sequence=[BLUE],
-        )
-        chart(styled(fig, 520), "product-customer-state")
-    with right:
-        seller = order_counts(
-            frame, "seller_state", "Primary seller state"
-        ).sort_values("Orders")
-        if seller.empty:
-            st.info("No primary seller states match the current filters.")
-        else:
-            fig = px.bar(
-                seller,
-                x="Orders",
-                y="Primary seller state",
-                orientation="h",
-                title="Orders by primary seller state",
-                color_discrete_sequence=[GREEN],
-            )
-            chart(styled(fig, 520), "product-seller-state")
 
-    left, right = st.columns(2)
-    with left:
-        state_late = rates(
-            frame, "customer_state", "is_late", "Customer state"
-        ).sort_values("Rate")
-        if state_late.empty:
-            st.info("No valid state lateness outcomes match the current filters.")
-        else:
-            fig = px.bar(
-                state_late,
-                x="Rate",
-                y="Customer state",
-                orientation="h",
-                hover_data=["Eligible orders"],
-                title="Late-delivery rate by customer state",
-                color_discrete_sequence=[RED],
-            )
-            fig.update_xaxes(tickformat=".0%")
-            chart(styled(fig, 520), "product-state-late")
-    with right:
-        reviews = (
-            frame.dropna(subset=["product_category", "review_score"])
-            .groupby("product_category", observed=True)
-            .agg(
-                **{
-                    "Average review score": ("review_score", "mean"),
-                    "Reviewed orders": ("order_id", "nunique"),
-                }
-            )
-            .reset_index()
-            .rename(columns={"product_category": "Primary category"})
+    with st.sidebar.expander("Customer geography", expanded=True):
+        customer_states = st.multiselect(
+            "State",
+            options(data["customer_state"]),
+            placeholder="All customer states",
         )
-        reviews = reviews[reviews["Reviewed orders"] >= 100].nsmallest(
-            15, "Average review score"
+        city_base = data
+        if customer_states:
+            city_base = city_base[city_base["customer_state"].isin(customer_states)]
+        customer_cities = st.multiselect(
+            "City",
+            options(city_base["customer_city"]),
+            placeholder="All cities in selected state(s)",
+            help="City choices are automatically narrowed by the selected customer state(s).",
         )
-        if reviews.empty:
-            st.info(
-                "No primary categories have at least 100 reviewed orders under these filters."
-            )
-        else:
-            fig = px.bar(
-                reviews.sort_values("Average review score", ascending=False),
-                x="Average review score",
-                y="Primary category",
-                orientation="h",
-                hover_data=["Reviewed orders"],
-                title="Lowest average reviews by primary category (100+ reviews)",
-                color_discrete_sequence=[ORANGE],
-            )
-            fig.update_xaxes(range=[1, 5])
-            chart(styled(fig, 520), "product-reviews")
+
+    with st.sidebar.expander("Route geography"):
+        seller_states = st.multiselect(
+            "Seller state",
+            options(data["seller_state"]),
+            placeholder="All seller states",
+        )
+        route_types = st.multiselect(
+            "Route type",
+            ["Same state", "Cross state"],
+            placeholder="Both route types",
+        )
+
+    with st.sidebar.expander("Product"):
+        categories = st.multiselect(
+            "Product category",
+            options(data["product_category"]),
+            placeholder="All product categories",
+        )
+
+    with st.sidebar.expander("Order"):
+        status_options = options(data["order_status"])
+        status_labels = {
+            status: status.replace("_", " ").title() for status in status_options
+        }
+        selected_status_labels = st.multiselect(
+            "Order status",
+            options=list(status_labels.values()),
+            placeholder="All order statuses",
+        )
+        reverse_status = {label: status for status, label in status_labels.items()}
+        statuses = [reverse_status[label] for label in selected_status_labels]
+
+    return (
+        date_range,
+        customer_states,
+        customer_cities,
+        seller_states,
+        route_types,
+        categories,
+        statuses,
+    )
 
 
 def main() -> None:
-    st.title("📦 Olist E-commerce Performance")
+    st.title("📦 Olist E-commerce Analytics")
     st.caption(
-        "Phase 1 descriptive dashboard · Historical Brazilian marketplace orders, 2016–2018"
+        "Phase 1 interactive dashboard supporting the exploratory analysis and later problem scoping"
     )
+
     try:
         data = load_data(str(DATA_PATH))
     except (FileNotFoundError, ValueError, OSError) as exc:
         st.error(f"Unable to load the dashboard dataset: {exc}")
         st.stop()
 
-    st.sidebar.header("Dashboard")
-    page = st.sidebar.radio("View", PAGES)
-    st.sidebar.header("Global filters")
-    minimum, maximum = (
-        data["purchase_date"].min().date(),
-        data["purchase_date"].max().date(),
-    )
-    date_range = st.sidebar.date_input(
-        "Purchase date range",
-        value=(minimum, maximum),
-        min_value=minimum,
-        max_value=maximum,
-    )
-    customer_states = st.sidebar.multiselect(
-        "Customer state", options(data["customer_state"])
-    )
-    seller_states = st.sidebar.multiselect(
-        "Primary seller state", options(data["seller_state"])
-    )
-    categories = st.sidebar.multiselect(
-        "Primary product category", options(data["product_category"])
-    )
-    statuses = st.sidebar.multiselect("Order status", options(data["order_status"]))
-    filtered = apply_filters(
-        data, date_range, customer_states, seller_states, categories, statuses
-    )
-    st.sidebar.caption(
-        f"{filtered['order_id'].nunique():,} of {data['order_id'].nunique():,} orders selected"
-    )
-    if filtered.empty:
-        st.warning(
-            "No orders match the current filter combination. Adjust the filters to continue."
+    filter_values = render_filters(data)
+    filtered = apply_filters(data, *filter_values)
+    date_range = filter_values[0]
+
+    if len(date_range) == 2:
+        st.caption(
+            f"**Analysis window:** {pd.Timestamp(date_range[0]).strftime('%b %Y')} to "
+            f"{pd.Timestamp(date_range[1]).strftime('%b %Y')} · "
+            f"**Selected:** {filtered['order_id'].nunique():,} of "
+            f"{data['order_id'].nunique():,} orders"
         )
+
+    if filtered.empty:
+        st.warning("No orders match the current filter combination.")
         return
 
-    {
-        "Overview": overview,
-        "Delivery Performance": delivery,
-        "Customer Experience": customer_experience,
-        "Product & Geography": product_geography,
-    }[page](filtered)
+    overview_tab, promise_tab, experience_tab = st.tabs(
+        [
+            "Business Overview",
+            "Delivery Promise",
+            "Delivery & Customer Experience",
+        ]
+    )
+
+    with overview_tab:
+        business_overview(filtered)
+    with promise_tab:
+        delivery_promise(filtered)
+    with experience_tab:
+        delivery_experience(filtered)
 
 
 if __name__ == "__main__":
