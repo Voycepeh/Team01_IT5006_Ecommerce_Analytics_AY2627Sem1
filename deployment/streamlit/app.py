@@ -195,6 +195,8 @@ def pareto_chart(frame: pd.DataFrame) -> None:
             .reset_index()
         )
         axis_title = "Orders"
+        text_template = "%{text:,.0f}"
+        hover_template = "%{x}<br>Orders: %{y:,.0f}<extra></extra>"
     else:
         pareto = (
             base.dropna(subset=["total_item_value"])
@@ -205,29 +207,45 @@ def pareto_chart(frame: pd.DataFrame) -> None:
             .reset_index()
         )
         axis_title = "GMV (R$)"
+        text_template = "R$%{text:,.0f}"
+        hover_template = "%{x}<br>GMV: R$%{y:,.0f}<extra></extra>"
 
-    pareto = pareto.head(15).copy()
-    pareto["Cumulative share"] = pareto["Value"].cumsum() / pareto["Value"].sum()
+    total_value = pareto["Value"].sum()
+    top_ten = pareto.head(10).copy()
+    others_value = pareto.iloc[10:]["Value"].sum()
+    if others_value > 0:
+        top_ten = pd.concat(
+            [
+                top_ten,
+                pd.DataFrame(
+                    {"product_category": ["Others"], "Value": [others_value]}
+                ),
+            ],
+            ignore_index=True,
+        )
+
+    pareto_display = top_ten
+    pareto_display["Cumulative share"] = (
+        pareto_display["Value"].cumsum() / total_value
+    )
 
     fig = go.Figure()
     fig.add_trace(
         go.Bar(
-            x=pareto["product_category"],
-            y=pareto["Value"],
+            x=pareto_display["product_category"],
+            y=pareto_display["Value"],
             name=axis_title,
             marker_color=BLUE,
-            text=pareto["Value"],
-            texttemplate="%{text:,.0f}",
+            text=pareto_display["Value"],
+            texttemplate=text_template,
             textposition="outside",
-            hovertemplate=(
-                "%{x}<br>" + axis_title + ": %{y:,.0f}<extra></extra>"
-            ),
+            hovertemplate=hover_template,
         )
     )
     fig.add_trace(
         go.Scatter(
-            x=pareto["product_category"],
-            y=pareto["Cumulative share"],
+            x=pareto_display["product_category"],
+            y=pareto_display["Cumulative share"],
             name="Cumulative share",
             mode="lines+markers",
             yaxis="y2",
@@ -245,12 +263,12 @@ def pareto_chart(frame: pd.DataFrame) -> None:
             "range": [0, 1.08],
         },
         xaxis={"title": "", "tickangle": -35},
-        title=f"Top product categories by {metric.lower()}",
+        title=f"Top 10 product categories + Others by {metric.lower()}",
     )
     chart(styled(fig, 500), "overview-pareto")
     st.caption(
-        "The Pareto view is descriptive business context. It shows concentration by category; "
-        "it does not imply that category concentration causes delivery or review outcomes."
+        "The Pareto view keeps the 10 largest categories visible and combines the remaining long tail into Others. "
+        "The cumulative line is calculated against the full selected population, so the final point reaches 100%."
     )
 
 
