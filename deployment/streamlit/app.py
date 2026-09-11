@@ -15,6 +15,8 @@ ORANGE = "#F97316"
 GREEN = "#0F766E"
 RED = "#DC2626"
 GREY = "#64748B"
+YEAR_COLORS = [BLUE, ORANGE, GREEN, GREY, RED]
+MONTH_ORDER = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 BRAZIL_REGION = {
     "AC": "North", "AP": "North", "AM": "North", "PA": "North", "RO": "North", "RR": "North", "TO": "North",
@@ -143,17 +145,46 @@ def monthly_business_metrics(frame: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def yoy_metric_figure(monthly: pd.DataFrame, metric: str, title: str) -> go.Figure:
+    data = monthly.copy()
+    data["Year"] = data["Month"].dt.year
+    data["Month number"] = data["Month"].dt.month
+    data["Month label"] = data["Month"].dt.strftime("%b")
+    fig = go.Figure()
+    for index, year in enumerate(sorted(data["Year"].unique())):
+        year_data = data[data["Year"] == year].sort_values("Month number")
+        if metric == "Orders":
+            hover = "%{x}<br>Orders: %{y:,.0f}<extra>%s</extra>" % year
+        else:
+            hover = "%{x}<br>%s: R$%%{y:,.2f}<extra>%s</extra>" % (metric, year)
+        fig.add_trace(go.Scatter(
+            x=year_data["Month label"], y=year_data[metric], mode="lines+markers", name=str(year),
+            line={"width": 2.5, "color": YEAR_COLORS[index % len(YEAR_COLORS)]},
+            marker={"size": 6}, hovertemplate=hover,
+        ))
+    y_title = "Orders" if metric == "Orders" else ("Gross merchandise value (R$)" if metric == "GMV" else "Average order value (R$)")
+    fig.update_layout(
+        title=title,
+        xaxis={"title": "Month", "categoryorder": "array", "categoryarray": MONTH_ORDER},
+        yaxis={"title": y_title, "tickformat": ","},
+        legend={"title": "Year", "orientation": "h", "y": 1.16, "x": 0.5, "xanchor": "center"},
+    )
+    if metric in {"GMV", "AOV"}:
+        fig.update_yaxes(tickprefix="R$")
+    return styled(fig, 330)
+
+
 def contribution_figure(frame: pd.DataFrame, dimension: str, metric: str, title: str) -> go.Figure:
     base = frame.dropna(subset=[dimension]).copy()
     if metric == "Orders":
         grouped = base.groupby(dimension)["order_id"].nunique().rename("Value").sort_values(ascending=False).reset_index()
-        axis_title, texttemplate, hover = "Orders", "%{text:,.0f}", "%{y}<br>Orders: %{x:,.0f}<extra></extra>"
+        axis_title, texttemplate, hover = "Orders", "%{text:,.0f}", "%{x}<br>Orders: %{y:,.0f}<extra></extra>"
     elif metric == "GMV":
         grouped = base.dropna(subset=["total_item_value"]).groupby(dimension)["total_item_value"].sum().rename("Value").sort_values(ascending=False).reset_index()
-        axis_title, texttemplate, hover = "Gross merchandise value (R$)", "R$%{text:,.0f}", "%{y}<br>GMV: R$%{x:,.0f}<extra></extra>"
+        axis_title, texttemplate, hover = "Gross merchandise value (R$)", "R$%{text:,.0f}", "%{x}<br>GMV: R$%{y:,.0f}<extra></extra>"
     else:
         grouped = base.dropna(subset=["total_item_value"]).groupby(dimension)["total_item_value"].mean().rename("Value").sort_values(ascending=False).reset_index()
-        axis_title, texttemplate, hover = "Average order value (R$)", "R$%{text:,.0f}", "%{y}<br>AOV: R$%{x:,.2f}<extra></extra>"
+        axis_title, texttemplate, hover = "Average order value (R$)", "R$%{text:,.0f}", "%{x}<br>AOV: R$%{y:,.2f}<extra></extra>"
     if grouped.empty:
         return go.Figure()
     if metric in {"Orders", "GMV"}:
@@ -165,17 +196,40 @@ def contribution_figure(frame: pd.DataFrame, dimension: str, metric: str, title:
     else:
         display = grouped.head(10).copy()
     fig = go.Figure()
-    fig.add_trace(go.Bar(y=display[dimension], x=display["Value"], orientation="h", name=axis_title, marker_color=BLUE, text=display["Value"], texttemplate=texttemplate, textposition="outside", cliponaxis=False, hovertemplate=hover))
+    fig.add_trace(go.Bar(
+        x=display[dimension], y=display["Value"], name=axis_title, marker_color=BLUE,
+        text=display["Value"], texttemplate=texttemplate, textposition="outside", cliponaxis=False, hovertemplate=hover,
+    ))
     if metric in {"Orders", "GMV"}:
-        fig.add_trace(go.Scatter(y=display[dimension], x=display["Cumulative share"], xaxis="x2", mode="lines+markers", name="Cumulative share", line={"color": ORANGE, "width": 3}, hovertemplate="%{y}<br>Cumulative share: %{x:.1%}<extra></extra>"))
-        fig.update_layout(xaxis2={"title": "Cumulative share", "overlaying": "x", "side": "top", "tickformat": ".0%", "range": [0, 1.08]})
-    fig.update_layout(title=title, xaxis={"title": axis_title}, yaxis={"title": "", "autorange": "reversed"}, legend={"orientation": "h", "y": 1.12})
-    return styled(fig, 500)
+        fig.add_trace(go.Scatter(
+            x=display[dimension], y=display["Cumulative share"], yaxis="y2", mode="lines+markers",
+            name="Cumulative share", line={"color": ORANGE, "width": 3},
+            hovertemplate="%{x}<br>Cumulative share: %{y:.1%}<extra></extra>",
+        ))
+        fig.update_layout(yaxis2={"title": "Cumulative share", "overlaying": "y", "side": "right", "tickformat": ".0%", "range": [0, 1.08]})
+    fig.update_layout(
+        title=title,
+        xaxis={"title": "", "tickangle": -30},
+        yaxis={"title": axis_title, "rangemode": "tozero"},
+        legend={"orientation": "h", "y": 1.13, "x": 0.5, "xanchor": "center"},
+    )
+    if metric in {"GMV", "AOV"}:
+        fig.update_yaxes(tickprefix="R$")
+    return styled(fig, 520)
+
+
+def _centered_pills(label: str, choices: tuple[str, ...], key: str, default: str) -> str:
+    columns = st.columns(3)
+    with columns[1]:
+        if hasattr(st, "segmented_control"):
+            selected = st.segmented_control(label, choices, default=default, key=key, label_visibility="collapsed")
+            return selected or default
+        return st.radio(label, choices, horizontal=True, key=key, label_visibility="collapsed")
 
 
 def business_overview(frame: pd.DataFrame) -> None:
     st.header("Business Overview")
-    st.caption("A compact view of commercial scale, trend, and concentration across the selected segment.")
+    st.caption("A compact view of commercial scale, year-over-year monthly trend, and concentration across the selected segment.")
     monthly = monthly_business_metrics(frame)
     if monthly.empty:
         st.info("No monthly business activity matches the current filters.")
@@ -185,23 +239,40 @@ def business_overview(frame: pd.DataFrame) -> None:
             f"From the first to last selected month, Orders changed by {monthly.iloc[-1]['Orders'] / monthly.iloc[0]['Orders'] - 1:+.0%}, "
             f"GMV by {monthly.iloc[-1]['GMV'] / monthly.iloc[0]['GMV'] - 1:+.0%}, and AOV by {monthly.iloc[-1]['AOV'] / monthly.iloc[0]['AOV'] - 1:+.0%}."
         )
-    cols = st.columns(3)
-    cols[0].metric("Orders", f"{frame['order_id'].nunique():,}", chart_data=monthly["Orders"].tolist(), chart_type="line", border=True)
-    cols[1].metric("GMV", money(frame["total_item_value"].sum(min_count=1)), help="GMV = Gross Merchandise Value. Here it is the sum of item prices, excluding freight; it is not Olist revenue.", chart_data=monthly["GMV"].tolist(), chart_type="line", border=True)
-    cols[2].metric("AOV", money(frame["total_item_value"].mean()), help="AOV = Average Order Value. Here it is the mean item value per order in the prepared one-row-per-order dataset.", chart_data=monthly["AOV"].tolist(), chart_type="line", border=True)
-    st.caption("Sparklines show monthly movement across the selected period; hover over them for temporal context.")
-    st.subheader("Contribution analysis")
-    metric = st.radio("Contribution measure", ("Orders", "GMV", "AOV"), horizontal=True, key="overview-contribution-measure", help="Orders and GMV use Pareto cumulative share. AOV is non-additive, so it is shown as a ranked comparison without a cumulative line.")
-    geography_level = st.radio("Customer geography level", ("Region", "State"), horizontal=True, key="overview-geography-level")
+
+    kpi_cols = st.columns(3)
+    kpi_cols[0].metric("Orders", f"{frame['order_id'].nunique():,}", border=True)
+    kpi_cols[1].metric("GMV", money(frame["total_item_value"].sum(min_count=1)), help="GMV = Gross Merchandise Value. Here it is the sum of item prices, excluding freight; it is not Olist revenue.", border=True)
+    kpi_cols[2].metric("AOV", money(frame["total_item_value"].mean()), help="AOV = Average Order Value. Here it is the mean item value per order in the prepared one-row-per-order dataset.", border=True)
+
+    trend_cols = st.columns(3)
+    with trend_cols[0]:
+        chart(yoy_metric_figure(monthly, "Orders", "Orders by month and year"), "overview-orders-yoy")
+    with trend_cols[1]:
+        chart(yoy_metric_figure(monthly, "GMV", "GMV by month and year"), "overview-gmv-yoy")
+    with trend_cols[2]:
+        chart(yoy_metric_figure(monthly, "AOV", "AOV by month and year"), "overview-aov-yoy")
+    st.caption("Each line is a calendar year. Partial years stop at the last observed month rather than being filled with zeroes.")
+
+    st.subheader("Pareto analysis")
+    metric = _centered_pills("Pareto measure", ("Orders", "GMV", "AOV"), "overview-contribution-measure", "Orders")
+    st.caption("Orders and GMV use a cumulative Pareto line. AOV is non-additive, so it is shown as a ranked comparison without a cumulative line.")
+
+    geography_slot = st.empty()
+    geography_level = _centered_pills("Customer geography level", ("Region", "State"), "overview-geography-level", "Region")
     geography_column = "customer_region" if geography_level == "Region" else "customer_state"
-    left, right = st.columns(2)
-    with left:
+    with geography_slot.container():
         geo_fig = contribution_figure(frame, geography_column, metric, f"{metric} by customer {geography_level.lower()}")
         chart(geo_fig, "overview-geography-contribution") if geo_fig.data else st.info("No customer geography matches the current filters.")
-    with right:
-        cat_fig = contribution_figure(frame, "product_category", metric, f"{metric} by product category")
+
+    category_slot = st.empty()
+    category_level = _centered_pills("Product category level", ("Category group", "Category"), "overview-category-level", "Category group")
+    category_column = "product_group" if category_level == "Category group" else "product_category"
+    with category_slot.container():
+        cat_fig = contribution_figure(frame, category_column, metric, f"{metric} by {category_level.lower()}")
         chart(cat_fig, "overview-category-contribution") if cat_fig.data else st.info("No product category matches the current filters.")
-    st.caption("AOV is an average, so these are ranked comparisons rather than Pareto contribution shares." if metric == "AOV" else "Top 10 contributors remain visible and the long tail is combined into Others where needed; the cumulative line uses the full selected population.")
+
+    st.caption("Top 10 contributors remain visible and the long tail is combined into Others where needed. AOV remains a ranking only because averages cannot be accumulated into a meaningful share.")
 
 
 def region_late_heatmap(valid: pd.DataFrame) -> None:
