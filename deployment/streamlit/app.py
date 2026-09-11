@@ -228,7 +228,7 @@ def _centered_pills(label: str, choices: tuple[str, ...], key: str, default: str
 
 
 def business_overview(frame: pd.DataFrame) -> None:
-    st.header("Business Overview")
+    st.header("Overview")
     st.caption("A compact view of commercial scale, year-over-year monthly trend, and concentration across the selected segment.")
     monthly = monthly_business_metrics(frame)
     if monthly.empty:
@@ -293,7 +293,7 @@ def region_late_heatmap(valid: pd.DataFrame) -> None:
 
 
 def delivery_promise(frame: pd.DataFrame) -> None:
-    st.header("Delivery Promise")
+    st.header("Delivery Analysis")
     st.caption("Compare Olist's checkout promise with actual delivery and see where late delivery is concentrated.")
     valid = delivered_orders(frame)
     if valid.empty:
@@ -381,7 +381,7 @@ def delivery_promise(frame: pd.DataFrame) -> None:
 
 
 def delivery_experience(frame: pd.DataFrame) -> None:
-    st.header("Delivery & Customer Experience")
+    st.header("Negative Review Analysis")
     st.caption("Explore whether review outcomes worsen as delivery moves from early to late relative to the promised date.")
     reviewed = delivered_orders(frame).dropna(subset=["review_score", "is_negative_review"]).copy()
     if reviewed.empty:
@@ -481,7 +481,7 @@ def main() -> None:
     if filtered.empty:
         st.warning("No orders match the current filter combination.")
         return
-    overview_tab, promise_tab, experience_tab = st.tabs(["Business Overview", "Delivery Promise", "Delivery & Customer Experience"])
+    overview_tab, promise_tab, experience_tab = st.tabs(["Overview", "Delivery Analysis", "Negative Review Analysis"])
     with overview_tab: business_overview(filtered)
     with promise_tab: delivery_promise(filtered)
     with experience_tab: delivery_experience(filtered)
