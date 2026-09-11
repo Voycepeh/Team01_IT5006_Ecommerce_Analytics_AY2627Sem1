@@ -171,7 +171,7 @@ def yoy_metric_figure(monthly: pd.DataFrame, metric: str, title: str) -> go.Figu
     )
     if metric in {"GMV", "AOV"}:
         fig.update_yaxes(tickprefix="R$")
-    return styled(fig, 330)
+    return styled(fig, 360)
 
 
 def contribution_figure(frame: pd.DataFrame, dimension: str, metric: str, title: str) -> go.Figure:
@@ -227,6 +227,24 @@ def _centered_pills(label: str, choices: tuple[str, ...], key: str, default: str
         return st.radio(label, choices, horizontal=True, key=key, label_visibility="collapsed")
 
 
+def _overview_metric_value(frame: pd.DataFrame, metric: str):
+    if frame.empty:
+        return pd.NA
+    if metric == "Orders":
+        return frame["order_id"].nunique()
+    if metric == "GMV":
+        return frame["total_item_value"].sum(min_count=1)
+    return frame["total_item_value"].mean()
+
+
+def _overview_metric_text(value, metric: str) -> str:
+    if pd.isna(value):
+        return "—"
+    if metric == "Orders":
+        return f"{int(value):,}"
+    return money(value)
+
+
 def business_overview(frame: pd.DataFrame) -> None:
     st.header("Overview")
     st.caption("Track Orders, GMV and AOV over time, then see where business activity is concentrated by customer geography and product.")
@@ -240,18 +258,27 @@ def business_overview(frame: pd.DataFrame) -> None:
             f"GMV by {monthly.iloc[-1]['GMV'] / monthly.iloc[0]['GMV'] - 1:+.0%}, and AOV by {monthly.iloc[-1]['AOV'] / monthly.iloc[0]['AOV'] - 1:+.0%} from the first to last selected month."
         )
 
-    kpi_cols = st.columns(3)
-    kpi_cols[0].metric("Orders", f"{frame['order_id'].nunique():,}", border=True)
-    kpi_cols[1].metric("GMV", money(frame["total_item_value"].sum(min_count=1)), help="GMV = Gross Merchandise Value. Here it is the sum of item prices, excluding freight; it is not Olist revenue.", border=True)
-    kpi_cols[2].metric("AOV", money(frame["total_item_value"].mean()), help="AOV = Average Order Value. Here it is the mean item value per order in the prepared one-row-per-order dataset.", border=True)
+    metric_config = {
+        "Orders": {"total_label": "Total Orders", "help": None},
+        "GMV": {"total_label": "Total GMV", "help": "GMV = Gross Merchandise Value. Here it is the sum of item prices, excluding freight; it is not Olist revenue."},
+        "AOV": {"total_label": "Overall AOV", "help": "AOV = Average Order Value. Here it is the mean item value per order in the prepared one-row-per-order dataset."},
+    }
 
-    trend_cols = st.columns(3)
-    with trend_cols[0]:
-        chart(yoy_metric_figure(monthly, "Orders", "Monthly Orders by year"), "overview-orders-yoy")
-    with trend_cols[1]:
-        chart(yoy_metric_figure(monthly, "GMV", "Monthly GMV by year"), "overview-gmv-yoy")
-    with trend_cols[2]:
-        chart(yoy_metric_figure(monthly, "AOV", "Monthly AOV by year"), "overview-aov-yoy")
+    for metric in ("Orders", "GMV", "AOV"):
+        st.subheader(metric)
+        kpi_col, chart_col = st.columns([1, 2])
+        with kpi_col:
+            total_value = _overview_metric_value(frame, metric)
+            kpi_col.metric(metric_config[metric]["total_label"], _overview_metric_text(total_value, metric), help=metric_config[metric]["help"], border=True)
+            year_cols = st.columns(2)
+            for year_col, year in zip(year_cols, (2017, 2018)):
+                year_frame = frame[frame["purchase_date"].dt.year == year]
+                year_value = _overview_metric_value(year_frame, metric)
+                year_col.metric(str(year), _overview_metric_text(year_value, metric), border=True)
+        with chart_col:
+            chart(yoy_metric_figure(monthly, metric, f"Monthly {metric} by year"), f"overview-{metric.lower()}-yoy")
+        st.divider()
+
     st.caption("Each line represents a calendar year so the same month can be compared across years. Partial years stop at the last observed month.")
 
     st.subheader("Pareto analysis")
@@ -404,11 +431,11 @@ def delivery_experience(frame: pd.DataFrame) -> None:
         fig = go.Figure(go.Bar(
             x=timing["Delivery timing"].astype(str), y=timing["Average review score"], name="Average review score",
             text=timing["Average review score"], texttemplate="%{text:.2f}", textposition="outside", cliponaxis=False,
-            marker={"color": timing["Average review score"], "colorscale": "RdYlGn", "cmin": 1, "cmax": 5, "showscale": True, "colorbar": {"title": "Review score<br>Red = worse<br>Green = better"}},
+            marker={"color": timing["Average review score"], "colorscale": "RdYlGn", "cmin": 1, "cmax": 5, "showscale": False},
             customdata=timing[["Reviewed orders", "Negative review rate"]],
             hovertemplate="%{x}<br>Average review score: %{y:.2f}<br>Reviewed orders: %{customdata[0]:,.0f}<br>Negative review rate: %{customdata[1]:.1%}<extra></extra>",
         ))
-        fig.update_layout(title="Average review score by delivery timing", showlegend=True, legend={"orientation": "h", "y": 1.16, "x": 0})
+        fig.update_layout(title="Average review score by delivery timing", showlegend=False)
         fig.update_yaxes(title="Average review score (1–5)", range=[1, 5.4])
         fig.update_xaxes(title="Delivery timing relative to promise", tickangle=-35)
         chart(styled(fig, 470), "experience-review-score")
@@ -417,11 +444,11 @@ def delivery_experience(frame: pd.DataFrame) -> None:
         fig = go.Figure(go.Bar(
             x=timing["Delivery timing"].astype(str), y=timing["Negative review rate"], name="Negative review rate",
             text=timing["Negative review rate"], texttemplate="%{text:.1%}", textposition="outside", cliponaxis=False,
-            marker={"color": timing["Negative review rate"], "colorscale": "RdYlGn_r", "cmin": 0, "cmax": 1, "showscale": True, "colorbar": {"title": "Negative review rate<br>Green = better<br>Red = worse", "tickformat": ".0%"}},
+            marker={"color": timing["Negative review rate"], "colorscale": "RdYlGn_r", "cmin": 0, "cmax": 1, "showscale": False},
             customdata=timing[["Reviewed orders", "Average review score"]],
             hovertemplate="%{x}<br>Negative review rate: %{y:.1%}<br>Reviewed orders: %{customdata[0]:,.0f}<br>Average review score: %{customdata[1]:.2f}<extra></extra>",
         ))
-        fig.update_layout(title="Negative review rate by delivery timing", showlegend=True, legend={"orientation": "h", "y": 1.16, "x": 0})
+        fig.update_layout(title="Negative review rate by delivery timing", showlegend=False)
         fig.update_yaxes(title="Negative review rate", tickformat=".0%", range=[0, max(float(timing["Negative review rate"].max()) * 1.15, 0.1)])
         fig.update_xaxes(title="Delivery timing relative to promise", tickangle=-35)
         chart(styled(fig, 470), "experience-negative-review-rate")
