@@ -152,8 +152,8 @@ def test_all_visuals_use_the_same_multi_filtered_population(monkeypatch):
     figures = {key: figure for key, figure in captured}
     expected_keys = {
         "overview-orders", "overview-aov", "overview-pareto",
-        "promise-quoted-actual", "promise-timing-counts", "experience-timing",
-        "experience-route-days", "experience-route-late", "experience-route-heatmap",
+        "promise-quoted-actual", "promise-timing-counts",
+        "experience-review-score", "experience-negative-review-rate",
     }
     assert expected_keys.issubset(figures), expected_keys.difference(figures)
     assert sum(figures["overview-orders"].data[0].y) == 2
@@ -170,14 +170,12 @@ def test_all_visuals_use_the_same_multi_filtered_population(monkeypatch):
         if getattr(trace, "customdata", None) is not None
     )
     assert timing_orders == 2
-    experience_bar = figures["experience-timing"].data[0]
-    assert sum(experience_bar.text) == 2
-    assert set(figures["experience-route-days"].data[0].x) == {"Same state"}
-    assert set(figures["experience-route-late"].data[0].x) == {"Same state"}
-    heatmap = figures["experience-route-heatmap"].data[0]
-    assert list(heatmap.x) == ["SP"]
-    assert list(heatmap.y) == ["SP"]
-    assert float(heatmap.customdata[0][0]) == 2
+    review_score_fig = figures["experience-review-score"]
+    negative_rate_fig = figures["experience-negative-review-rate"]
+    assert len(review_score_fig.data) == 1
+    assert len(negative_rate_fig.data) == 1
+    assert sum(review_score_fig.data[0].customdata[:, 0].astype(float)) == 2
+    assert sum(negative_rate_fig.data[0].customdata[:, 0].astype(float)) == 2
 
 
 def test_pareto_top_10_plus_others_uses_full_population(monkeypatch):
