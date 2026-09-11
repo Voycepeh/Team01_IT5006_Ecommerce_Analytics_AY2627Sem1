@@ -151,7 +151,7 @@ def test_all_visuals_use_the_same_multi_filtered_population(monkeypatch):
 
     figures = {key: figure for key, figure in captured}
     expected_keys = {
-        "overview-indexed-growth", "overview-orders", "overview-aov", "overview-pareto",
+        "overview-orders", "overview-aov", "overview-pareto",
         "promise-quoted-actual", "promise-timing-counts", "experience-timing",
         "experience-route-days", "experience-route-late", "experience-route-heatmap",
     }
@@ -163,7 +163,13 @@ def test_all_visuals_use_the_same_multi_filtered_population(monkeypatch):
     quote_fig = figures["promise-quoted-actual"]
     quote_orders = sum(trace.customdata[:, 0].astype(float).sum() for trace in quote_fig.data if getattr(trace, "customdata", None) is not None)
     assert quote_orders == 2
-    assert sum(figures["promise-timing-counts"].data[0].y) == 2
+    timing_fig = figures["promise-timing-counts"]
+    timing_orders = sum(
+        trace.customdata[:, 0].astype(float).sum()
+        for trace in timing_fig.data
+        if getattr(trace, "customdata", None) is not None
+    )
+    assert timing_orders == 2
     experience_bar = figures["experience-timing"].data[0]
     assert sum(experience_bar.text) == 2
     assert set(figures["experience-route-days"].data[0].x) == {"Same state"}
