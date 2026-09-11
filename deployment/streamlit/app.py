@@ -15,6 +15,8 @@ ORANGE = "#F97316"
 GREEN = "#0F766E"
 RED = "#DC2626"
 GREY = "#64748B"
+YEAR_COLORS = [BLUE, ORANGE, GREEN, GREY, RED]
+MONTH_ORDER = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 BRAZIL_REGION = {
     "AC": "North", "AP": "North", "AM": "North", "PA": "North", "RO": "North", "RR": "North", "TO": "North",
@@ -143,17 +145,46 @@ def monthly_business_metrics(frame: pd.DataFrame) -> pd.DataFrame:
     )
 
 
+def yoy_metric_figure(monthly: pd.DataFrame, metric: str, title: str) -> go.Figure:
+    data = monthly.copy()
+    data["Year"] = data["Month"].dt.year
+    data["Month number"] = data["Month"].dt.month
+    data["Month label"] = data["Month"].dt.strftime("%b")
+    fig = go.Figure()
+    for index, year in enumerate(sorted(data["Year"].unique())):
+        year_data = data[data["Year"] == year].sort_values("Month number")
+        if metric == "Orders":
+            hover = f"%{{x}}<br>Orders: %{{y:,.0f}}<extra>{year}</extra>"
+        else:
+            hover = f"%{{x}}<br>{metric}: R$%{{y:,.2f}}<extra>{year}</extra>"
+        fig.add_trace(go.Scatter(
+            x=year_data["Month label"], y=year_data[metric], mode="lines+markers", name=str(year),
+            line={"width": 2.5, "color": YEAR_COLORS[index % len(YEAR_COLORS)]},
+            marker={"size": 6}, hovertemplate=hover,
+        ))
+    y_title = "Orders" if metric == "Orders" else ("Gross merchandise value (R$)" if metric == "GMV" else "Average order value (R$)")
+    fig.update_layout(
+        title=title,
+        xaxis={"title": "Month", "categoryorder": "array", "categoryarray": MONTH_ORDER},
+        yaxis={"title": y_title, "tickformat": ","},
+        legend={"title": "Year", "orientation": "h", "y": 1.16, "x": 0.5, "xanchor": "center"},
+    )
+    if metric in {"GMV", "AOV"}:
+        fig.update_yaxes(tickprefix="R$")
+    return styled(fig, 330)
+
+
 def contribution_figure(frame: pd.DataFrame, dimension: str, metric: str, title: str) -> go.Figure:
     base = frame.dropna(subset=[dimension]).copy()
     if metric == "Orders":
         grouped = base.groupby(dimension)["order_id"].nunique().rename("Value").sort_values(ascending=False).reset_index()
-        axis_title, texttemplate, hover = "Orders", "%{text:,.0f}", "%{y}<br>Orders: %{x:,.0f}<extra></extra>"
+        axis_title, texttemplate, hover = "Orders", "%{text:,.0f}", "%{x}<br>Orders: %{y:,.0f}<extra></extra>"
     elif metric == "GMV":
         grouped = base.dropna(subset=["total_item_value"]).groupby(dimension)["total_item_value"].sum().rename("Value").sort_values(ascending=False).reset_index()
-        axis_title, texttemplate, hover = "Gross merchandise value (R$)", "R$%{text:,.0f}", "%{y}<br>GMV: R$%{x:,.0f}<extra></extra>"
+        axis_title, texttemplate, hover = "Gross merchandise value (R$)", "R$%{text:,.0f}", "%{x}<br>GMV: R$%{y:,.0f}<extra></extra>"
     else:
         grouped = base.dropna(subset=["total_item_value"]).groupby(dimension)["total_item_value"].mean().rename("Value").sort_values(ascending=False).reset_index()
-        axis_title, texttemplate, hover = "Average order value (R$)", "R$%{text:,.0f}", "%{y}<br>AOV: R$%{x:,.2f}<extra></extra>"
+        axis_title, texttemplate, hover = "Average order value (R$)", "R$%{text:,.0f}", "%{x}<br>AOV: R$%{y:,.2f}<extra></extra>"
     if grouped.empty:
         return go.Figure()
     if metric in {"Orders", "GMV"}:
@@ -165,48 +196,88 @@ def contribution_figure(frame: pd.DataFrame, dimension: str, metric: str, title:
     else:
         display = grouped.head(10).copy()
     fig = go.Figure()
-    fig.add_trace(go.Bar(y=display[dimension], x=display["Value"], orientation="h", name=axis_title, marker_color=BLUE, text=display["Value"], texttemplate=texttemplate, textposition="outside", cliponaxis=False, hovertemplate=hover))
+    fig.add_trace(go.Bar(
+        x=display[dimension], y=display["Value"], name=axis_title, marker_color=BLUE,
+        text=display["Value"], texttemplate=texttemplate, textposition="outside", cliponaxis=False, hovertemplate=hover,
+    ))
     if metric in {"Orders", "GMV"}:
-        fig.add_trace(go.Scatter(y=display[dimension], x=display["Cumulative share"], xaxis="x2", mode="lines+markers", name="Cumulative share", line={"color": ORANGE, "width": 3}, hovertemplate="%{y}<br>Cumulative share: %{x:.1%}<extra></extra>"))
-        fig.update_layout(xaxis2={"title": "Cumulative share", "overlaying": "x", "side": "top", "tickformat": ".0%", "range": [0, 1.08]})
-    fig.update_layout(title=title, xaxis={"title": axis_title}, yaxis={"title": "", "autorange": "reversed"}, legend={"orientation": "h", "y": 1.12})
-    return styled(fig, 500)
+        fig.add_trace(go.Scatter(
+            x=display[dimension], y=display["Cumulative share"], yaxis="y2", mode="lines+markers",
+            name="Cumulative share", line={"color": ORANGE, "width": 3},
+            hovertemplate="%{x}<br>Cumulative share: %{y:.1%}<extra></extra>",
+        ))
+        fig.update_layout(yaxis2={"title": "Cumulative share", "overlaying": "y", "side": "right", "tickformat": ".0%", "range": [0, 1.08]})
+    fig.update_layout(
+        title=title,
+        xaxis={"title": "", "tickangle": -30},
+        yaxis={"title": axis_title, "rangemode": "tozero"},
+        legend={"orientation": "h", "y": 1.13, "x": 0.5, "xanchor": "center"},
+    )
+    if metric in {"GMV", "AOV"}:
+        fig.update_yaxes(tickprefix="R$")
+    return styled(fig, 520)
+
+
+def _centered_pills(label: str, choices: tuple[str, ...], key: str, default: str) -> str:
+    columns = st.columns(3)
+    with columns[1]:
+        if hasattr(st, "segmented_control"):
+            selected = st.segmented_control(label, choices, default=default, key=key, label_visibility="collapsed")
+            return selected or default
+        return st.radio(label, choices, horizontal=True, key=key, label_visibility="collapsed")
 
 
 def business_overview(frame: pd.DataFrame) -> None:
-    st.header("Business Overview")
-    st.caption("A compact view of commercial scale, trend, and concentration across the selected segment.")
+    st.header("Overview")
+    st.caption("Track Orders, GMV and AOV over time, then see where business activity is concentrated by customer geography and product.")
     monthly = monthly_business_metrics(frame)
     if monthly.empty:
         st.info("No monthly business activity matches the current filters.")
         return
     if len(monthly) >= 2 and monthly.iloc[0]["Orders"] > 0 and monthly.iloc[0]["GMV"] > 0 and monthly.iloc[0]["AOV"] > 0:
         page_insight(
-            f"From the first to last selected month, Orders changed by {monthly.iloc[-1]['Orders'] / monthly.iloc[0]['Orders'] - 1:+.0%}, "
-            f"GMV by {monthly.iloc[-1]['GMV'] / monthly.iloc[0]['GMV'] - 1:+.0%}, and AOV by {monthly.iloc[-1]['AOV'] / monthly.iloc[0]['AOV'] - 1:+.0%}."
+            f"Across the selected period, Orders changed by {monthly.iloc[-1]['Orders'] / monthly.iloc[0]['Orders'] - 1:+.0%}, "
+            f"GMV by {monthly.iloc[-1]['GMV'] / monthly.iloc[0]['GMV'] - 1:+.0%}, and AOV by {monthly.iloc[-1]['AOV'] / monthly.iloc[0]['AOV'] - 1:+.0%} from the first to last selected month."
         )
-    cols = st.columns(3)
-    cols[0].metric("Orders", f"{frame['order_id'].nunique():,}", chart_data=monthly["Orders"].tolist(), chart_type="line", border=True)
-    cols[1].metric("GMV", money(frame["total_item_value"].sum(min_count=1)), help="GMV = Gross Merchandise Value. Here it is the sum of item prices, excluding freight; it is not Olist revenue.", chart_data=monthly["GMV"].tolist(), chart_type="line", border=True)
-    cols[2].metric("AOV", money(frame["total_item_value"].mean()), help="AOV = Average Order Value. Here it is the mean item value per order in the prepared one-row-per-order dataset.", chart_data=monthly["AOV"].tolist(), chart_type="line", border=True)
-    st.caption("Sparklines show monthly movement across the selected period; hover over them for temporal context.")
-    st.subheader("Contribution analysis")
-    metric = st.radio("Contribution measure", ("Orders", "GMV", "AOV"), horizontal=True, key="overview-contribution-measure", help="Orders and GMV use Pareto cumulative share. AOV is non-additive, so it is shown as a ranked comparison without a cumulative line.")
-    geography_level = st.radio("Customer geography level", ("Region", "State"), horizontal=True, key="overview-geography-level")
+
+    kpi_cols = st.columns(3)
+    kpi_cols[0].metric("Orders", f"{frame['order_id'].nunique():,}", border=True)
+    kpi_cols[1].metric("GMV", money(frame["total_item_value"].sum(min_count=1)), help="GMV = Gross Merchandise Value. Here it is the sum of item prices, excluding freight; it is not Olist revenue.", border=True)
+    kpi_cols[2].metric("AOV", money(frame["total_item_value"].mean()), help="AOV = Average Order Value. Here it is the mean item value per order in the prepared one-row-per-order dataset.", border=True)
+
+    trend_cols = st.columns(3)
+    with trend_cols[0]:
+        chart(yoy_metric_figure(monthly, "Orders", "Monthly Orders by year"), "overview-orders-yoy")
+    with trend_cols[1]:
+        chart(yoy_metric_figure(monthly, "GMV", "Monthly GMV by year"), "overview-gmv-yoy")
+    with trend_cols[2]:
+        chart(yoy_metric_figure(monthly, "AOV", "Monthly AOV by year"), "overview-aov-yoy")
+    st.caption("Each line represents a calendar year so the same month can be compared across years. Partial years stop at the last observed month.")
+
+    st.subheader("Pareto analysis")
+    metric = _centered_pills("Pareto measure", ("Orders", "GMV", "AOV"), "overview-contribution-measure", "Orders")
+    st.caption("Use the same business metric to compare concentration across customer geography and products. Orders and GMV include cumulative Pareto share; AOV is shown as a ranked comparison because it is non-additive.")
+
+    geography_slot = st.empty()
+    geography_level = _centered_pills("Customer geography level", ("Region", "State"), "overview-geography-level", "Region")
     geography_column = "customer_region" if geography_level == "Region" else "customer_state"
-    left, right = st.columns(2)
-    with left:
+    with geography_slot.container():
         geo_fig = contribution_figure(frame, geography_column, metric, f"{metric} by customer {geography_level.lower()}")
         chart(geo_fig, "overview-geography-contribution") if geo_fig.data else st.info("No customer geography matches the current filters.")
-    with right:
-        cat_fig = contribution_figure(frame, "product_category", metric, f"{metric} by product category")
+
+    category_slot = st.empty()
+    category_level = _centered_pills("Product category level", ("Category group", "Category"), "overview-category-level", "Category group")
+    category_column = "product_group" if category_level == "Category group" else "product_category"
+    with category_slot.container():
+        cat_fig = contribution_figure(frame, category_column, metric, f"{metric} by {category_level.lower()}")
         chart(cat_fig, "overview-category-contribution") if cat_fig.data else st.info("No product category matches the current filters.")
-    st.caption("AOV is an average, so these are ranked comparisons rather than Pareto contribution shares." if metric == "AOV" else "Top 10 contributors remain visible and the long tail is combined into Others where needed; the cumulative line uses the full selected population.")
+
+    st.caption("Top contributors remain visible and the long tail is combined into Others where appropriate.")
 
 
 def region_late_heatmap(valid: pd.DataFrame) -> None:
     st.subheader("Late delivery by route region")
-    st.caption("Where is Olist most likely to miss the promised delivery date?")
+    st.caption("Compare late-delivery rates across seller and customer regions to identify where missed promises are concentrated.")
     minimum_orders = st.slider("Minimum eligible orders per region pair", 1, 2000, 100, 25, key="promise-region-minimum", help="Hide region pairs with too few eligible delivered orders to support a stable descriptive rate.")
     regional = valid.dropna(subset=["customer_region", "seller_region"]).groupby(["customer_region", "seller_region"], as_index=False).agg(eligible_orders=("order_id", "nunique"), late_rate=("is_late", "mean"))
     regional = regional[regional["eligible_orders"] >= minimum_orders]
@@ -222,8 +293,8 @@ def region_late_heatmap(valid: pd.DataFrame) -> None:
 
 
 def delivery_promise(frame: pd.DataFrame) -> None:
-    st.header("Delivery Promise")
-    st.caption("Compare Olist's checkout promise with actual delivery and see where late delivery is concentrated.")
+    st.header("Delivery Analysis")
+    st.caption("Assess how actual delivery compares with the promised date, how orders are distributed from early to late, and where late delivery is concentrated geographically.")
     valid = delivered_orders(frame)
     if valid.empty:
         st.info("No delivered orders with valid quote and delivery timestamps match the filters.")
@@ -235,14 +306,13 @@ def delivery_promise(frame: pd.DataFrame) -> None:
     median_gap = valid["days_from_promise"].median()
     quote_mae = valid["days_from_promise"].abs().mean()
     page_insight(
-        f"Median actual delivery is {median_actual:,.0f} days versus {median_quote:,.0f} quoted days; "
-        f"the median order arrived {abs(median_gap):,.0f} days {'late' if median_gap > 0 else 'early'}."
+        f"Median actual delivery is {median_actual:,.0f} days versus {median_quote:,.0f} promised days, and the median order arrived {abs(median_gap):,.0f} days {'late' if median_gap > 0 else 'early'}."
     )
     cols = st.columns(4)
     cols[0].metric("Median actual delivery", f"{number(median_actual, 0)} days")
-    cols[1].metric("Median quoted delivery", f"{number(median_quote, 0)} days")
+    cols[1].metric("Median promised delivery", f"{number(median_quote, 0)} days")
     cols[2].metric("Median vs promise", f"{number(abs(median_gap), 0)}d {'late' if median_gap > 0 else 'early'}", help="Difference between actual and promised delivery timing, summarised by the median order.")
-    cols[3].metric("Quote MAE", f"{number(quote_mae, 1)} days", help="MAE = Mean Absolute Error. It is the average absolute gap between actual and promised delivery timing; lower means the promise is closer to reality.")
+    cols[3].metric("Promise MAE", f"{number(quote_mae, 1)} days", help="MAE = Mean Absolute Error. It is the average absolute gap between actual and promised delivery timing; lower means the promise is closer to reality.")
 
     left, right = st.columns(2)
     with left:
@@ -268,13 +338,13 @@ def delivery_promise(frame: pd.DataFrame) -> None:
         ))
         fig.add_trace(go.Scatter(x=[0, axis_max], y=[0, axis_max], mode="lines", name="Actual = promised", line={"color": GREY, "dash": "dash", "width": 2}, hoverinfo="skip"))
         fig.update_layout(
-            title="Actual delivery versus promised delivery",
+            title="Actual vs promised delivery",
             xaxis={"title": "Promised delivery days", "range": [0, axis_max * 1.03]},
             yaxis={"title": "Actual delivery days", "range": [0, axis_max * 1.03]},
             legend={"orientation": "h", "y": 1.18, "x": 0},
         )
         chart(styled(fig, 470), "promise-quoted-actual")
-        st.caption("Points show delivered orders. The orange line shows median actual delivery for sufficiently populated promise-day values. Below the dashed line is early; above it is late.")
+        st.caption("Each point is a delivered order. The orange line shows median actual delivery for sufficiently populated promise-day values; the dashed line marks actual = promised.")
 
     with right:
         bins = [-999, -30, -15, -7, -3, 0, 3, 7, 15, 30, 999]
@@ -296,22 +366,22 @@ def delivery_promise(frame: pd.DataFrame) -> None:
             customdata=late[["Orders"]], hovertemplate="%{x}<br>Orders: %{y:,.0f}<extra></extra>",
         ))
         fig.update_layout(
-            title="Orders by delivery timing relative to promise",
+            title="Orders by timing relative to promise",
             xaxis={"title": "Days from promise (early ← promise → late)", "categoryorder": "array", "categoryarray": labels, "tickangle": -35},
             yaxis={"title": "Orders", "tickformat": ","},
             barmode="group",
             legend={"orientation": "h", "y": 1.16, "x": 0},
         )
         chart(styled(fig, 470), "promise-timing-counts")
-        st.caption("Green bars arrived before the promised date; red bars arrived after it. Bar height shows the number of orders in each timing band.")
+        st.caption("Green bars are early deliveries and red bars are late deliveries; bar height shows the number of orders in each timing band.")
 
     region_late_heatmap(valid)
-    st.caption(f"Delivery metrics use {valid['order_id'].nunique():,} eligible completed delivered orders under the current filters.")
+    st.caption(f"Delivery analysis uses {valid['order_id'].nunique():,} eligible completed delivered orders under the current filters.")
 
 
 def delivery_experience(frame: pd.DataFrame) -> None:
-    st.header("Delivery & Customer Experience")
-    st.caption("Explore whether review outcomes worsen as delivery moves from early to late relative to the promised date.")
+    st.header("Negative Review Analysis")
+    st.caption("Assess how delivery timing relates to customer review outcomes, focusing on average review score and negative review rate.")
     reviewed = delivered_orders(frame).dropna(subset=["review_score", "is_negative_review"]).copy()
     if reviewed.empty:
         st.info("No reviewed orders with valid delivery outcomes match the filters.")
@@ -322,8 +392,8 @@ def delivery_experience(frame: pd.DataFrame) -> None:
     reviewed["Delivery timing"] = pd.cut(reviewed["days_early"], bins=bins, labels=labels, ordered=True)
     timing = reviewed.dropna(subset=["Delivery timing"]).groupby("Delivery timing", observed=False, as_index=False).agg(**{"Average review score": ("review_score", "mean"), "Negative review rate": ("is_negative_review", "mean"), "Reviewed orders": ("order_id", "nunique")})
     timing["Delivery timing"] = pd.Categorical(timing["Delivery timing"].astype(str), categories=labels, ordered=True)
-    timing = timing.sort_values("Delivery timing")
-    page_insight("Review outcomes deteriorate as orders move further past the promised delivery date. This is an exploratory association, not evidence of causation.")
+    timing = timing.sort_values("Delivery timing", ascending=False)
+    page_insight("Average review scores fall and negative review rates rise as deliveries move further past the promised date. This is an exploratory association, not evidence of causation.")
     cols = st.columns(3)
     cols[0].metric("Reviewed delivered orders", f"{reviewed['order_id'].nunique():,}")
     cols[1].metric("Average review score", number(reviewed["review_score"].mean(), 2))
@@ -356,7 +426,7 @@ def delivery_experience(frame: pd.DataFrame) -> None:
         fig.update_xaxes(title="Delivery timing relative to promise", tickangle=-35)
         chart(styled(fig, 470), "experience-negative-review-rate")
 
-    st.caption("Both charts use the same delivery-timing bands. Their colour legends use the same semantics: green = better customer outcome, red = worse customer outcome.")
+    st.caption("Both charts use the same early-to-late timing order. Colour has the same meaning in both: green = better customer outcome, red = worse customer outcome.")
 
 
 def _child_options(data: pd.DataFrame, parent_column: str, parents, child_column: str) -> list[str]:
@@ -410,7 +480,7 @@ def main() -> None:
     if filtered.empty:
         st.warning("No orders match the current filter combination.")
         return
-    overview_tab, promise_tab, experience_tab = st.tabs(["Business Overview", "Delivery Promise", "Delivery & Customer Experience"])
+    overview_tab, promise_tab, experience_tab = st.tabs(["Overview", "Delivery Analysis", "Negative Review Analysis"])
     with overview_tab: business_overview(filtered)
     with promise_tab: delivery_promise(filtered)
     with experience_tab: delivery_experience(filtered)

@@ -24,15 +24,21 @@ class _FakeColumn:
         return False
 
 
+class _FakePlaceholder:
+    def container(self):
+        return _FakeColumn()
+
+
 class _FakeStreamlit:
     def header(self, *args, **kwargs): return None
     def subheader(self, *args, **kwargs): return None
     def caption(self, *args, **kwargs): return None
     def info(self, *args, **kwargs): return None
     def warning(self, *args, **kwargs): return None
-    def columns(self, count): return [_FakeColumn() for _ in range(count)]
+    def columns(self, count): return [_FakeColumn() for _ in range(count if isinstance(count, int) else len(count))]
     def radio(self, label, options, **kwargs): return options[0]
     def slider(self, *args, **kwargs): return 1
+    def empty(self): return _FakePlaceholder()
 
 
 def _frame() -> pd.DataFrame:
@@ -99,6 +105,15 @@ def test_multiple_parent_and_child_filters_are_anded_together():
     assert list(filtered["order_id"]) == ["A1", "A2"]
 
 
+def test_yoy_metric_figure_splits_lines_by_year_without_zero_fill():
+    monthly = app.monthly_business_metrics(_frame())
+    fig = app.yoy_metric_figure(monthly, "Orders", "Test")
+    assert [trace.name for trace in fig.data] == ["2017", "2018"]
+    assert list(fig.data[0].x) == ["Mar", "Apr"]
+    assert list(fig.data[1].x) == ["Feb"]
+    assert all(value > 0 for trace in fig.data for value in trace.y)
+
+
 def test_all_visuals_use_the_same_multi_filtered_population(monkeypatch):
     frame = _frame()
     filtered = _apply(
@@ -122,6 +137,7 @@ def test_all_visuals_use_the_same_multi_filtered_population(monkeypatch):
 
     figures = {key: figure for key, figure in captured}
     expected_keys = {
+        "overview-orders-yoy", "overview-gmv-yoy", "overview-aov-yoy",
         "overview-geography-contribution", "overview-category-contribution",
         "promise-quoted-actual", "promise-timing-counts", "promise-region-heatmap",
         "experience-review-score", "experience-negative-review-rate",
@@ -129,12 +145,12 @@ def test_all_visuals_use_the_same_multi_filtered_population(monkeypatch):
     assert expected_keys.issubset(figures), expected_keys.difference(figures)
 
     geography_bar = figures["overview-geography-contribution"].data[0]
-    assert list(geography_bar.y) == ["Southeast"]
-    assert sum(geography_bar.x) == 2
+    assert list(geography_bar.x) == ["Southeast"]
+    assert sum(geography_bar.y) == 2
 
     category_bar = figures["overview-category-contribution"].data[0]
-    assert list(category_bar.y) == ["books_general_interest"]
-    assert sum(category_bar.x) == 2
+    assert list(category_bar.x) == ["Books, Media & Stationery"]
+    assert sum(category_bar.y) == 2
 
     quote_fig = figures["promise-quoted-actual"]
     assert [trace.name for trace in quote_fig.data] == ["Delivered orders", "Median actual delivery", "Actual = promised"]
@@ -177,13 +193,19 @@ def test_orders_pareto_top_10_plus_others_uses_full_population():
     frame = app.enrich_dimensions(pd.concat([frame, pd.DataFrame(extra)], ignore_index=True))
     figure = app.contribution_figure(frame, "product_category", "Orders", "Test")
     bars, cumulative = figure.data[0], figure.data[1]
-    assert len(bars.y) == 11
-    assert bars.y[-1] == "Others"
-    assert abs(float(cumulative.x[-1]) - 1.0) < 1e-12
-    assert float(bars.x[-1]) > 0
+    assert len(bars.x) == 11
+    assert bars.x[-1] == "Others"
+    assert abs(float(cumulative.y[-1]) - 1.0) < 1e-12
+    assert float(bars.y[-1]) > 0
 
 
 def test_aov_contribution_is_ranked_not_pareto():
     figure = app.contribution_figure(_frame(), "product_category", "AOV", "Test")
     assert len(figure.data) == 1
     assert figure.data[0].type == "bar"
+
+
+def test_category_group_dimension_is_available_for_pareto():
+    figure = app.contribution_figure(_frame(), "product_group", "Orders", "Test")
+    labels = set(figure.data[0].x)
+    assert {"Books, Media & Stationery", "Sports & Leisure", "Health & Beauty"}.issubset(labels)
