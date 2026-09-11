@@ -269,7 +269,7 @@ def business_overview(frame: pd.DataFrame) -> None:
         kpi_col, chart_col = st.columns([1, 2])
         with kpi_col:
             total_value = _overview_metric_value(frame, metric)
-            st.metric(metric_config[metric]["total_label"], _overview_metric_text(total_value, metric), help=metric_config[metric]["help"], border=True)
+            kpi_col.metric(metric_config[metric]["total_label"], _overview_metric_text(total_value, metric), help=metric_config[metric]["help"], border=True)
             year_cols = st.columns(2)
             for year_col, year in zip(year_cols, (2017, 2018)):
                 year_frame = frame[frame["purchase_date"].dt.year == year]
