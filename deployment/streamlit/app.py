@@ -47,6 +47,50 @@ ORDER_STATUS_GROUPS = {
 st.set_page_config(page_title="Olist E-commerce Analytics", page_icon="📦", layout="wide")
 
 
+def apply_dashboard_style() -> None:
+    """Keep KPI values readable without wrapping or clipping across screen sizes."""
+    st.markdown(
+        """
+        <style>
+        div[data-testid="stMetric"] {
+            min-width: 0;
+            padding: 0.75rem 0.8rem;
+        }
+        div[data-testid="stMetricValue"] {
+            min-width: 0;
+            overflow: visible;
+        }
+        div[data-testid="stMetricValue"] > div,
+        div[data-testid="stMetricValue"] p {
+            white-space: nowrap !important;
+            overflow: visible !important;
+            text-overflow: clip !important;
+            font-size: clamp(1.05rem, 1.8vw, 1.8rem) !important;
+            line-height: 1.08 !important;
+            letter-spacing: -0.02em;
+        }
+        div[data-testid="stMetricLabel"] p {
+            font-size: clamp(0.72rem, 1vw, 0.9rem) !important;
+            line-height: 1.2 !important;
+        }
+        @media (max-width: 900px) {
+            div[data-testid="stMetric"] {
+                padding: 0.5rem 0.55rem;
+            }
+            div[data-testid="stMetricValue"] > div,
+            div[data-testid="stMetricValue"] p {
+                font-size: 1rem !important;
+            }
+            div[data-testid="stMetricLabel"] p {
+                font-size: 0.7rem !important;
+            }
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def _lookup_group(value, mapping, default="Other"):
     if pd.isna(value):
         return pd.NA
@@ -118,9 +162,18 @@ def percent(value: float) -> str:
 
 
 def styled(figure: go.Figure, height: int = 390) -> go.Figure:
-    figure.update_layout(template="plotly_white", height=height, margin={"l": 16, "r": 16, "t": 60, "b": 24}, legend_title_text="", hoverlabel={"namelength": -1}, font={"size": 13}, uniformtext_minsize=11, uniformtext_mode="hide")
-    figure.update_xaxes(automargin=True)
-    figure.update_yaxes(automargin=True)
+    figure.update_layout(
+        template="plotly_white",
+        height=height,
+        margin={"l": 18, "r": 18, "t": 72, "b": 34},
+        legend_title_text="",
+        hoverlabel={"namelength": -1},
+        font={"size": 12},
+        uniformtext_minsize=9,
+        uniformtext_mode="show",
+    )
+    figure.update_xaxes(automargin=True, tickfont={"size": 11})
+    figure.update_yaxes(automargin=True, tickfont={"size": 11})
     return figure
 
 
@@ -167,7 +220,7 @@ def yoy_metric_figure(monthly: pd.DataFrame, metric: str, title: str) -> go.Figu
         title=title,
         xaxis={"title": "Month", "categoryorder": "array", "categoryarray": MONTH_ORDER},
         yaxis={"title": y_title, "tickformat": ","},
-        legend={"title": "Year", "orientation": "h", "y": 1.16, "x": 0.5, "xanchor": "center"},
+        legend={"title": "Year", "orientation": "h", "y": 1.14, "x": 0.5, "xanchor": "center"},
     )
     if metric in {"GMV", "AOV"}:
         fig.update_yaxes(tickprefix="R$")
@@ -195,10 +248,11 @@ def contribution_figure(frame: pd.DataFrame, dimension: str, metric: str, title:
         display["Cumulative share"] = display["Value"].cumsum() / grouped["Value"].sum()
     else:
         display = grouped.head(10).copy()
+    value_max = max(float(display["Value"].max()), 1.0)
     fig = go.Figure()
     fig.add_trace(go.Bar(
         x=display[dimension], y=display["Value"], name=axis_title, marker_color=BLUE,
-        text=display["Value"], texttemplate=texttemplate, textposition="outside", cliponaxis=False, hovertemplate=hover,
+        text=display["Value"], texttemplate=texttemplate, textposition="outside", textfont={"size": 10}, cliponaxis=False, hovertemplate=hover,
     ))
     if metric in {"Orders", "GMV"}:
         fig.add_trace(go.Scatter(
@@ -210,8 +264,8 @@ def contribution_figure(frame: pd.DataFrame, dimension: str, metric: str, title:
     fig.update_layout(
         title=title,
         xaxis={"title": "", "tickangle": -30},
-        yaxis={"title": axis_title, "rangemode": "tozero"},
-        legend={"orientation": "h", "y": 1.13, "x": 0.5, "xanchor": "center"},
+        yaxis={"title": axis_title, "range": [0, value_max * 1.18]},
+        legend={"orientation": "h", "y": 1.12, "x": 0.5, "xanchor": "center"},
     )
     if metric in {"GMV", "AOV"}:
         fig.update_yaxes(tickprefix="R$")
@@ -313,7 +367,7 @@ def region_late_heatmap(valid: pd.DataFrame) -> None:
         return
     late = regional.pivot(index="customer_region", columns="seller_region", values="late_rate").reindex(index=REGION_ORDER, columns=REGION_ORDER)
     counts = regional.pivot(index="customer_region", columns="seller_region", values="eligible_orders").reindex(index=REGION_ORDER, columns=REGION_ORDER)
-    fig = go.Figure(go.Heatmap(z=late.values, x=late.columns.tolist(), y=late.index.tolist(), colorscale="Reds", zmin=0, customdata=counts.values, texttemplate="%{z:.1%}", hovertemplate="Seller region: %{x}<br>Customer region: %{y}<br>Late delivery rate: %{z:.1%}<br>Eligible orders: %{customdata:,.0f}<extra></extra>", colorbar={"title": "Late %", "tickformat": ".0%"}))
+    fig = go.Figure(go.Heatmap(z=late.values, x=late.columns.tolist(), y=late.index.tolist(), colorscale="Reds", zmin=0, customdata=counts.values, texttemplate="%{z:.1%}", textfont={"size": 10}, hovertemplate="Seller region: %{x}<br>Customer region: %{y}<br>Late delivery rate: %{z:.1%}<br>Eligible orders: %{customdata:,.0f}<extra></extra>", colorbar={"title": "Late %", "tickformat": ".0%"}))
     fig.update_layout(title="Late delivery rate by seller region × customer region", xaxis_title="Seller region", yaxis_title="Customer region")
     chart(styled(fig, 520), "promise-region-heatmap")
     st.caption("Darker red means a higher share of delivered orders arrived after the promised date. This is descriptive, not causal.")
@@ -368,7 +422,7 @@ def delivery_promise(frame: pd.DataFrame) -> None:
             title="Actual vs promised delivery",
             xaxis={"title": "Promised delivery days", "range": [0, axis_max * 1.03]},
             yaxis={"title": "Actual delivery days", "range": [0, axis_max * 1.03]},
-            legend={"orientation": "h", "y": 1.18, "x": 0},
+            legend={"orientation": "h", "y": 1.16, "x": 0},
         )
         chart(styled(fig, 470), "promise-quoted-actual")
         st.caption("Each point is a delivered order. The orange line shows median actual delivery for sufficiently populated promise-day values; the dashed line marks actual = promised.")
@@ -381,23 +435,24 @@ def delivery_promise(frame: pd.DataFrame) -> None:
         counts["Delivery timing"] = counts["Delivery timing"].astype(str)
         early = counts[counts["Delivery timing"].str.contains("early")]
         late = counts[counts["Delivery timing"].str.contains("late")]
+        count_max = max(float(counts["Orders"].max()), 1.0)
         fig = go.Figure()
         fig.add_trace(go.Bar(
             x=early["Delivery timing"], y=early["Orders"], name="Early", marker_color=GREEN,
-            text=early["Orders"], texttemplate="%{text:,.0f}", textposition="outside", cliponaxis=False,
+            text=early["Orders"], texttemplate="%{text:,.0f}", textposition="outside", textfont={"size": 10}, cliponaxis=False,
             customdata=early[["Orders"]], hovertemplate="%{x}<br>Orders: %{y:,.0f}<extra></extra>",
         ))
         fig.add_trace(go.Bar(
             x=late["Delivery timing"], y=late["Orders"], name="Late", marker_color=RED,
-            text=late["Orders"], texttemplate="%{text:,.0f}", textposition="outside", cliponaxis=False,
+            text=late["Orders"], texttemplate="%{text:,.0f}", textposition="outside", textfont={"size": 10}, cliponaxis=False,
             customdata=late[["Orders"]], hovertemplate="%{x}<br>Orders: %{y:,.0f}<extra></extra>",
         ))
         fig.update_layout(
             title="Orders by timing relative to promise",
             xaxis={"title": "Days from promise (early ← promise → late)", "categoryorder": "array", "categoryarray": labels, "tickangle": -35},
-            yaxis={"title": "Orders", "tickformat": ","},
+            yaxis={"title": "Orders", "tickformat": ",", "range": [0, count_max * 1.18]},
             barmode="group",
-            legend={"orientation": "h", "y": 1.16, "x": 0},
+            legend={"orientation": "h", "y": 1.14, "x": 0},
         )
         chart(styled(fig, 470), "promise-timing-counts")
         st.caption("Green bars are early deliveries and red bars are late deliveries; bar height shows the number of orders in each timing band.")
@@ -430,26 +485,27 @@ def delivery_experience(frame: pd.DataFrame) -> None:
     with left:
         fig = go.Figure(go.Bar(
             x=timing["Delivery timing"].astype(str), y=timing["Average review score"], name="Average review score",
-            text=timing["Average review score"], texttemplate="%{text:.2f}", textposition="outside", cliponaxis=False,
+            text=timing["Average review score"], texttemplate="%{text:.2f}", textposition="outside", textfont={"size": 10}, cliponaxis=False,
             marker={"color": timing["Average review score"], "colorscale": "RdYlGn", "cmin": 1, "cmax": 5, "showscale": False},
             customdata=timing[["Reviewed orders", "Negative review rate"]],
             hovertemplate="%{x}<br>Average review score: %{y:.2f}<br>Reviewed orders: %{customdata[0]:,.0f}<br>Negative review rate: %{customdata[1]:.1%}<extra></extra>",
         ))
         fig.update_layout(title="Average review score by delivery timing", showlegend=False)
-        fig.update_yaxes(title="Average review score (1–5)", range=[1, 5.4])
+        fig.update_yaxes(title="Average review score (1–5)", range=[1, 5.55])
         fig.update_xaxes(title="Delivery timing relative to promise", tickangle=-35)
         chart(styled(fig, 470), "experience-review-score")
 
     with right:
+        negative_max = max(float(timing["Negative review rate"].max()), 0.1)
         fig = go.Figure(go.Bar(
             x=timing["Delivery timing"].astype(str), y=timing["Negative review rate"], name="Negative review rate",
-            text=timing["Negative review rate"], texttemplate="%{text:.1%}", textposition="outside", cliponaxis=False,
+            text=timing["Negative review rate"], texttemplate="%{text:.1%}", textposition="outside", textfont={"size": 10}, cliponaxis=False,
             marker={"color": timing["Negative review rate"], "colorscale": "RdYlGn_r", "cmin": 0, "cmax": 1, "showscale": False},
             customdata=timing[["Reviewed orders", "Average review score"]],
             hovertemplate="%{x}<br>Negative review rate: %{y:.1%}<br>Reviewed orders: %{customdata[0]:,.0f}<br>Average review score: %{customdata[1]:.2f}<extra></extra>",
         ))
         fig.update_layout(title="Negative review rate by delivery timing", showlegend=False)
-        fig.update_yaxes(title="Negative review rate", tickformat=".0%", range=[0, max(float(timing["Negative review rate"].max()) * 1.15, 0.1)])
+        fig.update_yaxes(title="Negative review rate", tickformat=".0%", range=[0, min(negative_max * 1.22, 1.08)])
         fig.update_xaxes(title="Delivery timing relative to promise", tickangle=-35)
         chart(styled(fig, 470), "experience-negative-review-rate")
 
@@ -492,6 +548,7 @@ def render_filters(data: pd.DataFrame):
 
 
 def main() -> None:
+    apply_dashboard_style()
     st.title("📦 Olist E-commerce Analytics")
     st.caption("Phase 1 interactive dashboard supporting exploratory analysis and later problem scoping")
     try:
