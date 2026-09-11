@@ -393,7 +393,7 @@ def delivery_experience(frame: pd.DataFrame) -> None:
     reviewed["Delivery timing"] = pd.cut(reviewed["days_early"], bins=bins, labels=labels, ordered=True)
     timing = reviewed.dropna(subset=["Delivery timing"]).groupby("Delivery timing", observed=False, as_index=False).agg(**{"Average review score": ("review_score", "mean"), "Negative review rate": ("is_negative_review", "mean"), "Reviewed orders": ("order_id", "nunique")})
     timing["Delivery timing"] = pd.Categorical(timing["Delivery timing"].astype(str), categories=labels, ordered=True)
-    timing = timing.sort_values("Delivery timing")
+    timing = timing.sort_values("Delivery timing", ascending=False)
     page_insight("Review outcomes deteriorate as orders move further past the promised delivery date. This is an exploratory association, not evidence of causation.")
     cols = st.columns(3)
     cols[0].metric("Reviewed delivered orders", f"{reviewed['order_id'].nunique():,}")
