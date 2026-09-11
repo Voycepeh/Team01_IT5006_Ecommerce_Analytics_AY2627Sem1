@@ -25,6 +25,18 @@ BRAZIL_REGION = {
     "PR": "South", "RS": "South", "SC": "South",
 }
 
+REGION_ORDER = ["North", "Northeast", "Central-West", "Southeast", "South"]
+
+STATE_CENTROIDS = {
+    "AC": (-9.02, -70.81), "AL": (-9.57, -36.78), "AP": (1.41, -51.77), "AM": (-3.42, -65.86),
+    "BA": (-12.58, -41.70), "CE": (-5.20, -39.53), "DF": (-15.79, -47.88), "ES": (-19.19, -40.34),
+    "GO": (-15.83, -49.84), "MA": (-5.42, -45.44), "MT": (-12.68, -56.92), "MS": (-20.77, -54.79),
+    "MG": (-18.51, -44.56), "PA": (-3.79, -52.48), "PB": (-7.24, -36.78), "PR": (-24.89, -51.55),
+    "PE": (-8.38, -37.86), "PI": (-7.72, -42.73), "RJ": (-22.25, -42.66), "RN": (-5.81, -36.59),
+    "RS": (-30.17, -53.50), "RO": (-10.83, -63.34), "RR": (2.74, -62.08), "SC": (-27.24, -50.22),
+    "SP": (-22.19, -48.79), "SE": (-10.57, -37.45), "TO": (-10.18, -48.33),
+}
+
 PRODUCT_GROUPS = {
     "Home & Furniture": {
         "bed_bath_table", "furniture_decor", "housewares", "office_furniture", "home_construction",
@@ -187,23 +199,6 @@ def chart(figure: go.Figure, key: str) -> None:
     st.plotly_chart(figure, use_container_width=True, key=key)
 
 
-def add_bar_labels(
-    figure: go.Figure,
-    *,
-    value_format: str = ",.0f",
-    position: str = "auto",
-    orientation: str = "v",
-) -> go.Figure:
-    value_axis = "x" if orientation == "h" else "y"
-    figure.update_traces(
-        texttemplate=f"%{{{value_axis}:{value_format}}}",
-        textposition=position,
-        cliponaxis=False,
-        selector={"type": "bar"},
-    )
-    return figure
-
-
 def delivered_orders(frame: pd.DataFrame) -> pd.DataFrame:
     return frame[
         frame["is_delivered_complete"] & frame["delivery_days"].notna()
@@ -257,9 +252,78 @@ def pareto_chart(frame: pd.DataFrame) -> None:
     st.caption("Top 10 categories stay visible; the remaining long tail is combined into Others. The cumulative line uses the full selected population.")
 
 
+def business_geography_map(frame: pd.DataFrame) -> None:
+    st.subheader("Customer geography")
+    metric = st.radio(
+        "Map measure", ("Orders", "GMV", "AOV", "Average review score"),
+        horizontal=True, key="overview-map-measure",
+        help="The selected measure controls both marker intensity and relative marker size. Geography is based on customer state.",
+    )
+    geo = frame.dropna(subset=["customer_state"]).groupby("customer_state", as_index=False).agg(
+        Orders=("order_id", "nunique"),
+        GMV=("total_item_value", "sum"),
+        AOV=("total_item_value", "mean"),
+        **{"Average review score": ("review_score", "mean")},
+    )
+    geo["lat"] = geo["customer_state"].map(lambda state: STATE_CENTROIDS.get(state, (pd.NA, pd.NA))[0])
+    geo["lon"] = geo["customer_state"].map(lambda state: STATE_CENTROIDS.get(state, (pd.NA, pd.NA))[1])
+    geo = geo.dropna(subset=["lat", "lon", metric]).copy()
+    if geo.empty:
+        st.info("No customer-state geography is available for the current filters.")
+        return
+
+    values = geo[metric].astype(float)
+    spread = values.max() - values.min()
+    geo["Marker size"] = 22.0 if spread == 0 else 12.0 + 28.0 * (values - values.min()) / spread
+
+    value_formats = {
+        "Orders": ",.0f",
+        "GMV": ",.0f",
+        "AOV": ",.2f",
+        "Average review score": ".2f",
+    }
+    prefixes = {"Orders": "", "GMV": "R$", "AOV": "R$", "Average review score": ""}
+    hover_metric = f"{prefixes[metric]}%{{customdata[4]:{value_formats[metric]}}}"
+    fig = go.Figure(go.Scattergeo(
+        lat=geo["lat"], lon=geo["lon"], text=geo["customer_state"], mode="markers+text",
+        textposition="middle center",
+        marker={
+            "size": geo["Marker size"],
+            "color": values,
+            "colorscale": "Blues",
+            "showscale": True,
+            "colorbar": {"title": metric},
+            "line": {"width": 1, "color": "white"},
+            "opacity": 0.88,
+        },
+        customdata=geo[["Orders", "GMV", "AOV", "Average review score", metric]],
+        hovertemplate=(
+            "State: %{text}<br>"
+            f"{metric}: {hover_metric}<br>"
+            "Orders: %{customdata[0]:,.0f}<br>"
+            "GMV: R$%{customdata[1]:,.0f}<br>"
+            "AOV: R$%{customdata[2]:,.2f}<br>"
+            "Average review score: %{customdata[3]:.2f}<extra></extra>"
+        ),
+    ))
+    fig.update_geos(
+        projection_type="mercator",
+        center={"lat": -14.2, "lon": -51.9},
+        lataxis_range=[-35, 6], lonaxis_range=[-75, -32],
+        showland=True, landcolor="rgb(235, 238, 242)",
+        showocean=True, oceancolor="rgb(248, 250, 252)",
+        showcountries=True, countrycolor="rgb(160, 170, 180)",
+        showcoastlines=True, coastlinecolor="rgb(160, 170, 180)",
+        bgcolor="rgba(0,0,0,0)",
+    )
+    fig.update_layout(title=f"{metric} by customer state", geo={"domain": {"x": [0, 1], "y": [0, 1]}})
+    chart(styled(fig, 560), "overview-geography-map")
+    st.caption("Each marker represents a Brazilian customer state. Darker/larger markers indicate a higher value for the selected measure.")
+
+
 def business_overview(frame: pd.DataFrame) -> None:
     st.header("Business Overview")
-    st.caption("Use the filters to compare order volume, basket value, and category contribution across segments.")
+    st.caption("Use the filters to compare order volume, basket value, category contribution, and customer geography across segments.")
     monthly = (
         frame.assign(Month=frame["purchase_date"].dt.to_period("M").dt.to_timestamp())
         .groupby("Month", as_index=False).agg(Orders=("order_id", "nunique"), AOV=("total_item_value", "mean")).sort_values("Month")
@@ -308,16 +372,61 @@ def business_overview(frame: pd.DataFrame) -> None:
         if not latest.empty:
             fig.add_trace(go.Scatter(
                 x=latest["Month"], y=latest["AOV"], mode="text", showlegend=False,
-                text=[f"R${latest['AOV'].iloc[0]:,.0f}"], textposition="top center",
-                hoverinfo="skip",
+                text=[f"R${latest['AOV'].iloc[0]:,.0f}"], textposition="top center", hoverinfo="skip",
             ))
         chart(styled(fig, 420), "overview-aov")
+
+    business_geography_map(frame)
     pareto_chart(frame)
+
+
+def region_late_heatmap(valid: pd.DataFrame) -> None:
+    st.subheader("Late delivery by route region")
+    st.caption("Where is Olist most likely to miss the promised delivery date?")
+    minimum_orders = st.slider(
+        "Minimum eligible orders per region pair", 1, 2000, 100, 25, key="promise-region-minimum",
+        help="Hide region pairs with too few eligible delivered orders to support a stable descriptive rate.",
+    )
+    regional = valid.dropna(subset=["customer_region", "seller_region"]).groupby(
+        ["customer_region", "seller_region"], as_index=False
+    ).agg(eligible_orders=("order_id", "nunique"), late_rate=("is_late", "mean"))
+    regional = regional[regional["eligible_orders"] >= minimum_orders]
+    if regional.empty:
+        st.info("No seller/customer region pair meets the current minimum-order threshold.")
+        return
+
+    late = regional.pivot(index="customer_region", columns="seller_region", values="late_rate").reindex(
+        index=REGION_ORDER, columns=REGION_ORDER
+    )
+    counts = regional.pivot(index="customer_region", columns="seller_region", values="eligible_orders").reindex(
+        index=REGION_ORDER, columns=REGION_ORDER
+    )
+    fig = go.Figure(go.Heatmap(
+        z=late.values,
+        x=late.columns.tolist(),
+        y=late.index.tolist(),
+        colorscale="Reds",
+        zmin=0,
+        customdata=counts.values,
+        texttemplate="%{z:.1%}",
+        hovertemplate=(
+            "Seller region: %{x}<br>Customer region: %{y}<br>"
+            "Late delivery rate: %{z:.1%}<br>Eligible orders: %{customdata:,.0f}<extra></extra>"
+        ),
+        colorbar={"title": "Late %", "tickformat": ".0%"},
+    ))
+    fig.update_layout(
+        title="Late delivery rate by seller region × customer region",
+        xaxis_title="Seller region",
+        yaxis_title="Customer region",
+    )
+    chart(styled(fig, 520), "promise-region-heatmap")
+    st.caption("Darker red means a higher share of delivered orders arrived after the promised date. This is descriptive, not causal.")
 
 
 def delivery_promise(frame: pd.DataFrame) -> None:
     st.header("Delivery Promise")
-    st.caption("Compare Olist's checkout promise with actual delivery across the selected segment.")
+    st.caption("Compare Olist's checkout promise with actual delivery and see where late delivery is concentrated.")
     valid = delivered_orders(frame)
     if valid.empty:
         st.info("No delivered orders with valid quote and delivery timestamps match the filters.")
@@ -418,6 +527,7 @@ def delivery_promise(frame: pd.DataFrame) -> None:
         fig.add_vline(x=0, line_width=2, line_color=GREY)
         chart(styled(fig, 450), "promise-timing-counts")
 
+    region_late_heatmap(valid)
     st.caption(f"Delivery metrics use {valid['order_id'].nunique():,} eligible completed delivered orders under the current filters.")
 
 
@@ -478,7 +588,7 @@ def delivery_experience(frame: pd.DataFrame) -> None:
         fig.update_xaxes(title="Delivery timing relative to promise", tickangle=-35)
         chart(styled(fig, 450), "experience-negative-review-rate")
 
-    st.caption("Both charts use the same delivery-timing bands so they can be read in parallel. Geography is intentionally left to the global filters rather than shown as unrelated route visuals on this page.")
+    st.caption("Both charts use the same delivery-timing bands so they can be read in parallel. Geography is handled on the Business Overview and Delivery Promise pages.")
 
 
 def _child_options(data: pd.DataFrame, parent_column: str, parents, child_column: str) -> list[str]:
