@@ -3,7 +3,6 @@
 from pathlib import Path
 
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
 import streamlit as st
 
@@ -155,10 +154,8 @@ def contribution_figure(frame: pd.DataFrame, dimension: str, metric: str, title:
     else:
         grouped = base.dropna(subset=["total_item_value"]).groupby(dimension)["total_item_value"].mean().rename("Value").sort_values(ascending=False).reset_index()
         axis_title, texttemplate, hover = "Average order value (R$)", "R$%{text:,.0f}", "%{y}<br>AOV: R$%{x:,.2f}<extra></extra>"
-
     if grouped.empty:
         return go.Figure()
-
     if metric in {"Orders", "GMV"}:
         display = grouped.head(10).copy()
         others = grouped.iloc[10:]["Value"].sum()
@@ -167,13 +164,12 @@ def contribution_figure(frame: pd.DataFrame, dimension: str, metric: str, title:
         display["Cumulative share"] = display["Value"].cumsum() / grouped["Value"].sum()
     else:
         display = grouped.head(10).copy()
-
     fig = go.Figure()
     fig.add_trace(go.Bar(y=display[dimension], x=display["Value"], orientation="h", name=axis_title, marker_color=BLUE, text=display["Value"], texttemplate=texttemplate, textposition="outside", cliponaxis=False, hovertemplate=hover))
     if metric in {"Orders", "GMV"}:
         fig.add_trace(go.Scatter(y=display[dimension], x=display["Cumulative share"], xaxis="x2", mode="lines+markers", name="Cumulative share", line={"color": ORANGE, "width": 3}, hovertemplate="%{y}<br>Cumulative share: %{x:.1%}<extra></extra>"))
         fig.update_layout(xaxis2={"title": "Cumulative share", "overlaying": "x", "side": "top", "tickformat": ".0%", "range": [0, 1.08]})
-    fig.update_layout(title=title, xaxis={"title": axis_title}, yaxis={"title": "", "autorange": "reversed"})
+    fig.update_layout(title=title, xaxis={"title": axis_title}, yaxis={"title": "", "autorange": "reversed"}, legend={"orientation": "h", "y": 1.12})
     return styled(fig, 500)
 
 
@@ -184,42 +180,28 @@ def business_overview(frame: pd.DataFrame) -> None:
     if monthly.empty:
         st.info("No monthly business activity matches the current filters.")
         return
-
     if len(monthly) >= 2 and monthly.iloc[0]["Orders"] > 0 and monthly.iloc[0]["GMV"] > 0 and monthly.iloc[0]["AOV"] > 0:
         page_insight(
             f"From the first to last selected month, Orders changed by {monthly.iloc[-1]['Orders'] / monthly.iloc[0]['Orders'] - 1:+.0%}, "
             f"GMV by {monthly.iloc[-1]['GMV'] / monthly.iloc[0]['GMV'] - 1:+.0%}, and AOV by {monthly.iloc[-1]['AOV'] / monthly.iloc[0]['AOV'] - 1:+.0%}."
         )
-
     cols = st.columns(3)
     cols[0].metric("Orders", f"{frame['order_id'].nunique():,}", chart_data=monthly["Orders"].tolist(), chart_type="line", border=True)
     cols[1].metric("GMV", money(frame["total_item_value"].sum(min_count=1)), help="GMV = Gross Merchandise Value. Here it is the sum of item prices, excluding freight; it is not Olist revenue.", chart_data=monthly["GMV"].tolist(), chart_type="line", border=True)
     cols[2].metric("AOV", money(frame["total_item_value"].mean()), help="AOV = Average Order Value. Here it is the mean item value per order in the prepared one-row-per-order dataset.", chart_data=monthly["AOV"].tolist(), chart_type="line", border=True)
     st.caption("Sparklines show monthly movement across the selected period; hover over them for temporal context.")
-
     st.subheader("Contribution analysis")
     metric = st.radio("Contribution measure", ("Orders", "GMV", "AOV"), horizontal=True, key="overview-contribution-measure", help="Orders and GMV use Pareto cumulative share. AOV is non-additive, so it is shown as a ranked comparison without a cumulative line.")
     geography_level = st.radio("Customer geography level", ("Region", "State"), horizontal=True, key="overview-geography-level")
     geography_column = "customer_region" if geography_level == "Region" else "customer_state"
-
     left, right = st.columns(2)
     with left:
         geo_fig = contribution_figure(frame, geography_column, metric, f"{metric} by customer {geography_level.lower()}")
-        if geo_fig.data:
-            chart(geo_fig, "overview-geography-contribution")
-        else:
-            st.info("No customer geography matches the current filters.")
+        chart(geo_fig, "overview-geography-contribution") if geo_fig.data else st.info("No customer geography matches the current filters.")
     with right:
         cat_fig = contribution_figure(frame, "product_category", metric, f"{metric} by product category")
-        if cat_fig.data:
-            chart(cat_fig, "overview-category-contribution")
-        else:
-            st.info("No product category matches the current filters.")
-
-    if metric == "AOV":
-        st.caption("AOV is an average, so these are ranked comparisons rather than Pareto contribution shares.")
-    else:
-        st.caption("Top 10 contributors remain visible and the long tail is combined into Others where needed; the cumulative line uses the full selected population.")
+        chart(cat_fig, "overview-category-contribution") if cat_fig.data else st.info("No product category matches the current filters.")
+    st.caption("AOV is an average, so these are ranked comparisons rather than Pareto contribution shares." if metric == "AOV" else "Top 10 contributors remain visible and the long tail is combined into Others where needed; the cumulative line uses the full selected population.")
 
 
 def region_late_heatmap(valid: pd.DataFrame) -> None:
@@ -246,43 +228,83 @@ def delivery_promise(frame: pd.DataFrame) -> None:
     if valid.empty:
         st.info("No delivered orders with valid quote and delivery timestamps match the filters.")
         return
-    valid["days_early"] = -valid["days_late"].astype(float)
-    median_actual, median_quote = valid["delivery_days"].median(), valid["estimated_delivery_days"].median()
-    median_early, quote_mae = valid["days_early"].median(), valid["days_early"].abs().mean()
-    page_insight(f"Median actual delivery is {median_actual:,.0f} days versus {median_quote:,.0f} quoted days; the median order arrived {abs(median_early):,.0f} days {'early' if median_early >= 0 else 'late'}.")
+
+    valid["days_from_promise"] = valid["days_late"].astype(float)
+    median_actual = valid["delivery_days"].median()
+    median_quote = valid["estimated_delivery_days"].median()
+    median_gap = valid["days_from_promise"].median()
+    quote_mae = valid["days_from_promise"].abs().mean()
+    page_insight(
+        f"Median actual delivery is {median_actual:,.0f} days versus {median_quote:,.0f} quoted days; "
+        f"the median order arrived {abs(median_gap):,.0f} days {'late' if median_gap > 0 else 'early'}."
+    )
     cols = st.columns(4)
     cols[0].metric("Median actual delivery", f"{number(median_actual, 0)} days")
     cols[1].metric("Median quoted delivery", f"{number(median_quote, 0)} days")
-    cols[2].metric("Median vs promise", f"{number(abs(median_early), 0)}d {'early' if median_early >= 0 else 'late'}", help="Difference between the actual delivery date and the checkout promise, summarised by the median order.")
+    cols[2].metric("Median vs promise", f"{number(abs(median_gap), 0)}d {'late' if median_gap > 0 else 'early'}", help="Difference between actual and promised delivery timing, summarised by the median order.")
     cols[3].metric("Quote MAE", f"{number(quote_mae, 1)} days", help="MAE = Mean Absolute Error. It is the average absolute gap between actual and promised delivery timing; lower means the promise is closer to reality.")
 
     left, right = st.columns(2)
     with left:
-        quote = valid.groupby("estimated_delivery_days", as_index=False).agg(**{"Median actual delivery days": ("delivery_days", "median"), "Orders": ("order_id", "nunique")}).sort_values("estimated_delivery_days")
-        axis_max = max(float(quote["estimated_delivery_days"].max()), float(quote["Median actual delivery days"].max()))
+        quote = (
+            valid.groupby("estimated_delivery_days", as_index=False)
+            .agg(**{"Median actual delivery days": ("delivery_days", "median"), "Orders": ("order_id", "nunique")})
+            .sort_values("estimated_delivery_days")
+        )
+        stable_quote = quote[quote["Orders"] >= 25].copy()
+        if stable_quote.empty:
+            stable_quote = quote.copy()
+        axis_max = max(float(valid["estimated_delivery_days"].quantile(0.995)), float(valid["delivery_days"].quantile(0.995)), 1.0)
         fig = go.Figure()
-        fig.add_trace(go.Scatter(x=quote["estimated_delivery_days"], y=quote["Median actual delivery days"], mode="lines+markers", name="Median actual delivery", customdata=quote[["Orders"]], line={"color": ORANGE, "width": 3}, hovertemplate="Quoted: %{x:.0f} days<br>Median actual: %{y:.1f} days<br>Orders: %{customdata[0]:,.0f}<extra></extra>"))
-        fig.add_trace(go.Scatter(x=[0, axis_max], y=[0, axis_max], mode="lines", name="Actual = promised", line={"color": GREY, "dash": "dash"}, hoverinfo="skip"))
-        fig.update_layout(title="Are delivery promises conservative or optimistic?", xaxis_title="Promised delivery days", yaxis_title="Median actual delivery days")
-        fig.add_annotation(x=0.02, y=0.98, xref="paper", yref="paper", xanchor="left", yanchor="top", showarrow=False, text="Below dashed line = earlier than promised<br>Above dashed line = later than promised", bgcolor="rgba(255,255,255,0.85)", bordercolor=GREY, font={"size": 11})
-        chart(styled(fig, 450), "promise-quoted-actual")
+        fig.add_trace(go.Scatter(
+            x=valid["estimated_delivery_days"], y=valid["delivery_days"], mode="markers", name="Delivered orders",
+            marker={"color": BLUE, "size": 5, "opacity": 0.12},
+            hovertemplate="Promised: %{x:.0f} days<br>Actual: %{y:.0f} days<extra></extra>",
+        ))
+        fig.add_trace(go.Scatter(
+            x=stable_quote["estimated_delivery_days"], y=stable_quote["Median actual delivery days"], mode="lines+markers",
+            name="Median actual delivery", customdata=stable_quote[["Orders"]], line={"color": ORANGE, "width": 3},
+            hovertemplate="Promised: %{x:.0f} days<br>Median actual: %{y:.1f} days<br>Orders in band: %{customdata[0]:,.0f}<extra></extra>",
+        ))
+        fig.add_trace(go.Scatter(x=[0, axis_max], y=[0, axis_max], mode="lines", name="Actual = promised", line={"color": GREY, "dash": "dash", "width": 2}, hoverinfo="skip"))
+        fig.update_layout(
+            title="Actual delivery versus promised delivery",
+            xaxis={"title": "Promised delivery days", "range": [0, axis_max * 1.03]},
+            yaxis={"title": "Actual delivery days", "range": [0, axis_max * 1.03]},
+            legend={"orientation": "h", "y": 1.18, "x": 0},
+        )
+        chart(styled(fig, 470), "promise-quoted-actual")
+        st.caption("Points show delivered orders. The orange line shows median actual delivery for sufficiently populated promise-day values. Below the dashed line is early; above it is late.")
+
     with right:
-        bins = [-999, -30, -15, -7, -3, 0, 3, 7, 15, 999]
-        labels = ["30+ late", "15–30 late", "7–15 late", "3–7 late", "0–3 late", "0–3 early", "3–7 early", "7–15 early", "15+ early"]
-        valid["Delivery timing"] = pd.cut(valid["days_early"], bins=bins, labels=labels, ordered=True)
+        bins = [-999, -30, -15, -7, -3, 0, 3, 7, 15, 30, 999]
+        labels = ["30+ early", "15–30 early", "7–15 early", "3–7 early", "0–3 early", "0–3 late", "3–7 late", "7–15 late", "15–30 late", "30+ late"]
+        valid["Delivery timing"] = pd.cut(valid["days_from_promise"], bins=bins, labels=labels, ordered=True)
         counts = valid.dropna(subset=["Delivery timing"]).groupby("Delivery timing", observed=False)["order_id"].nunique().rename("Orders").reset_index()
         counts["Delivery timing"] = counts["Delivery timing"].astype(str)
-        counts["Side"] = counts["Delivery timing"].str.contains("late").map({True: "Late", False: "Early"})
-        counts["Signed orders"] = counts["Orders"].where(counts["Side"].eq("Early"), -counts["Orders"])
-        counts["Band"] = counts["Delivery timing"].str.replace(" late", "", regex=False).str.replace(" early", "", regex=False)
+        early = counts[counts["Delivery timing"].str.contains("early")]
+        late = counts[counts["Delivery timing"].str.contains("late")]
         fig = go.Figure()
-        late, early = counts[counts["Side"] == "Late"].copy(), counts[counts["Side"] == "Early"].copy()
-        fig.add_trace(go.Bar(y=late["Band"], x=late["Signed orders"], orientation="h", name="Late", marker_color=RED, customdata=late[["Orders", "Delivery timing"]], text=late["Orders"], texttemplate="%{text:,.0f}", textposition="outside", cliponaxis=False, hovertemplate="%{customdata[1]}<br>Orders: %{customdata[0]:,.0f}<extra></extra>"))
-        fig.add_trace(go.Bar(y=early["Band"], x=early["Signed orders"], orientation="h", name="Early", marker_color=GREEN, customdata=early[["Orders", "Delivery timing"]], text=early["Orders"], texttemplate="%{text:,.0f}", textposition="outside", cliponaxis=False, hovertemplate="%{customdata[1]}<br>Orders: %{customdata[0]:,.0f}<extra></extra>"))
-        max_orders = max(float(counts["Orders"].max()), 1.0)
-        fig.update_layout(title="Early vs late delivery relative to the promise", barmode="relative", xaxis={"title": "Orders (late ← promise → early)", "range": [-max_orders * 1.25, max_orders * 1.25], "tickformat": ","}, yaxis={"title": "Days from promise", "categoryorder": "array", "categoryarray": ["0–3", "3–7", "7–15", "15–30", "30+"]})
-        fig.add_vline(x=0, line_width=2, line_color=GREY)
-        chart(styled(fig, 450), "promise-timing-counts")
+        fig.add_trace(go.Bar(
+            x=early["Delivery timing"], y=early["Orders"], name="Early", marker_color=GREEN,
+            text=early["Orders"], texttemplate="%{text:,.0f}", textposition="outside", cliponaxis=False,
+            customdata=early[["Orders"]], hovertemplate="%{x}<br>Orders: %{y:,.0f}<extra></extra>",
+        ))
+        fig.add_trace(go.Bar(
+            x=late["Delivery timing"], y=late["Orders"], name="Late", marker_color=RED,
+            text=late["Orders"], texttemplate="%{text:,.0f}", textposition="outside", cliponaxis=False,
+            customdata=late[["Orders"]], hovertemplate="%{x}<br>Orders: %{y:,.0f}<extra></extra>",
+        ))
+        fig.update_layout(
+            title="Orders by delivery timing relative to promise",
+            xaxis={"title": "Days from promise (early ← promise → late)", "categoryorder": "array", "categoryarray": labels, "tickangle": -35},
+            yaxis={"title": "Orders", "tickformat": ","},
+            barmode="group",
+            legend={"orientation": "h", "y": 1.16, "x": 0},
+        )
+        chart(styled(fig, 470), "promise-timing-counts")
+        st.caption("Green bars arrived before the promised date; red bars arrived after it. Bar height shows the number of orders in each timing band.")
+
     region_late_heatmap(valid)
     st.caption(f"Delivery metrics use {valid['order_id'].nunique():,} eligible completed delivered orders under the current filters.")
 
@@ -306,18 +328,35 @@ def delivery_experience(frame: pd.DataFrame) -> None:
     cols[0].metric("Reviewed delivered orders", f"{reviewed['order_id'].nunique():,}")
     cols[1].metric("Average review score", number(reviewed["review_score"].mean(), 2))
     cols[2].metric("Negative review rate", percent(reviewed["is_negative_review"].mean()), help="Share of reviewed delivered orders classified as a negative review under the Phase 1 prepared-data definition.")
+
     left, right = st.columns(2)
     with left:
-        fig = px.bar(timing, x="Delivery timing", y="Average review score", title="Average review score by delivery timing", text="Average review score", color_discrete_sequence=[BLUE], hover_data={"Reviewed orders": ":,", "Negative review rate": ":.1%"})
-        fig.update_traces(texttemplate="%{text:.2f}", textposition="outside", cliponaxis=False)
-        fig.update_yaxes(title="Average review score (1–5)", range=[1, 5.4]); fig.update_xaxes(title="Delivery timing relative to promise", tickangle=-35)
-        chart(styled(fig, 450), "experience-review-score")
+        fig = go.Figure(go.Bar(
+            x=timing["Delivery timing"].astype(str), y=timing["Average review score"], name="Average review score",
+            text=timing["Average review score"], texttemplate="%{text:.2f}", textposition="outside", cliponaxis=False,
+            marker={"color": timing["Average review score"], "colorscale": "RdYlGn", "cmin": 1, "cmax": 5, "showscale": True, "colorbar": {"title": "Review score<br>Red = worse<br>Green = better"}},
+            customdata=timing[["Reviewed orders", "Negative review rate"]],
+            hovertemplate="%{x}<br>Average review score: %{y:.2f}<br>Reviewed orders: %{customdata[0]:,.0f}<br>Negative review rate: %{customdata[1]:.1%}<extra></extra>",
+        ))
+        fig.update_layout(title="Average review score by delivery timing", showlegend=True, legend={"orientation": "h", "y": 1.16, "x": 0})
+        fig.update_yaxes(title="Average review score (1–5)", range=[1, 5.4])
+        fig.update_xaxes(title="Delivery timing relative to promise", tickangle=-35)
+        chart(styled(fig, 470), "experience-review-score")
+
     with right:
-        fig = px.bar(timing, x="Delivery timing", y="Negative review rate", title="Negative review rate by delivery timing", text="Negative review rate", color_discrete_sequence=[RED], hover_data={"Reviewed orders": ":,", "Average review score": ":.2f"})
-        fig.update_traces(texttemplate="%{text:.1%}", textposition="outside", cliponaxis=False)
-        fig.update_yaxes(title="Negative review rate", tickformat=".0%", rangemode="tozero"); fig.update_xaxes(title="Delivery timing relative to promise", tickangle=-35)
-        chart(styled(fig, 450), "experience-negative-review-rate")
-    st.caption("Both charts use the same delivery-timing bands so they can be read in parallel. Delivery geography is handled on the Delivery Promise page.")
+        fig = go.Figure(go.Bar(
+            x=timing["Delivery timing"].astype(str), y=timing["Negative review rate"], name="Negative review rate",
+            text=timing["Negative review rate"], texttemplate="%{text:.1%}", textposition="outside", cliponaxis=False,
+            marker={"color": timing["Negative review rate"], "colorscale": "RdYlGn_r", "cmin": 0, "cmax": 1, "showscale": True, "colorbar": {"title": "Negative review rate<br>Green = better<br>Red = worse", "tickformat": ".0%"}},
+            customdata=timing[["Reviewed orders", "Average review score"]],
+            hovertemplate="%{x}<br>Negative review rate: %{y:.1%}<br>Reviewed orders: %{customdata[0]:,.0f}<br>Average review score: %{customdata[1]:.2f}<extra></extra>",
+        ))
+        fig.update_layout(title="Negative review rate by delivery timing", showlegend=True, legend={"orientation": "h", "y": 1.16, "x": 0})
+        fig.update_yaxes(title="Negative review rate", tickformat=".0%", range=[0, max(float(timing["Negative review rate"].max()) * 1.15, 0.1)])
+        fig.update_xaxes(title="Delivery timing relative to promise", tickangle=-35)
+        chart(styled(fig, 470), "experience-negative-review-rate")
+
+    st.caption("Both charts use the same delivery-timing bands. Their colour legends use the same semantics: green = better customer outcome, red = worse customer outcome.")
 
 
 def _child_options(data: pd.DataFrame, parent_column: str, parents, child_column: str) -> list[str]:
