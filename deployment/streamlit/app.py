@@ -421,91 +421,64 @@ def delivery_promise(frame: pd.DataFrame) -> None:
     st.caption(f"Delivery metrics use {valid['order_id'].nunique():,} eligible completed delivered orders under the current filters.")
 
 
-def delivery_heatmap(valid: pd.DataFrame) -> None:
-    st.subheader("Route heatmap")
-    metric = st.radio("Heatmap measure", ("Late delivery rate", "Median delivery days"), horizontal=True, key="heatmap-measure")
-    minimum_orders = st.slider("Minimum eligible orders per state pair", 10, 200, 50, 10, key="heatmap-minimum")
-    geography = valid.dropna(subset=["customer_state", "seller_state"]).copy()
-    grouped = geography.groupby(["customer_state", "seller_state"]).agg(
-        eligible_orders=("order_id", "nunique"), late_rate=("is_late", "mean"), median_delivery_days=("delivery_days", "median")
-    ).reset_index()
-    grouped = grouped[grouped["eligible_orders"] >= minimum_orders]
-    if grouped.empty:
-        st.info("No customer/seller state pair meets the current minimum-order threshold.")
-        return
-    value_col, fmt, texttemplate, color_scale = (
-        ("late_rate", ".1%", "%{z:.1%}", "OrRd") if metric == "Late delivery rate"
-        else ("median_delivery_days", ".1f", "%{z:.1f}", "Blues")
-    )
-    pivot = grouped.pivot(index="customer_state", columns="seller_state", values=value_col)
-    counts = grouped.pivot(index="customer_state", columns="seller_state", values="eligible_orders")
-    fig = go.Figure(go.Heatmap(
-        z=pivot.values, x=pivot.columns.tolist(), y=pivot.index.tolist(), colorscale=color_scale,
-        customdata=counts.reindex(index=pivot.index, columns=pivot.columns).values, texttemplate=texttemplate,
-        hovertemplate="Customer state: %{y}<br>Seller state: %{x}<br>" + metric + f": %{{z:{fmt}}}<br>Eligible orders: %{{customdata:,.0f}}<extra></extra>",
-    ))
-    fig.update_layout(title=f"{metric} by customer state × seller state", xaxis_title="Seller state", yaxis_title="Customer state")
-    chart(styled(fig, 610), "experience-route-heatmap")
-
-
 def delivery_experience(frame: pd.DataFrame) -> None:
     st.header("Delivery & Customer Experience")
-    st.caption("Compare delivery timing, review outcomes, and route geography across the same filter context.")
+    st.caption("Explore whether review outcomes worsen as delivery moves from early to late relative to the promised date.")
     valid = delivered_orders(frame)
     reviewed = valid.dropna(subset=["review_score", "is_negative_review"]).copy()
     if reviewed.empty:
         st.info("No reviewed orders with valid delivery outcomes match the filters.")
         return
+
     reviewed["days_early"] = -reviewed["days_late"].astype(float)
     bins = [-999, -30, -15, -7, -3, 0, 3, 7, 15, 999]
     labels = ["30+ late", "15–30 late", "7–15 late", "3–7 late", "0–3 late", "0–3 early", "3–7 early", "7–15 early", "15+ early"]
     reviewed["Delivery timing"] = pd.cut(reviewed["days_early"], bins=bins, labels=labels, ordered=True)
     timing = reviewed.dropna(subset=["Delivery timing"]).groupby("Delivery timing", observed=False, as_index=False).agg(
-        **{"Average review score": ("review_score", "mean"), "Negative review rate": ("is_negative_review", "mean"), "Reviewed orders": ("order_id", "nunique")}
+        **{
+            "Average review score": ("review_score", "mean"),
+            "Negative review rate": ("is_negative_review", "mean"),
+            "Reviewed orders": ("order_id", "nunique"),
+        }
     )
-    page_insight("Review outcomes deteriorate as orders move further past the promised delivery date; use the timing bands below to compare the selected segment.")
+    timing["Delivery timing"] = pd.Categorical(timing["Delivery timing"].astype(str), categories=labels, ordered=True)
+    timing = timing.sort_values("Delivery timing")
+
+    page_insight("Review outcomes deteriorate as orders move further past the promised delivery date. This is an exploratory association, not evidence of causation.")
     cols = st.columns(3)
     cols[0].metric("Reviewed delivered orders", f"{reviewed['order_id'].nunique():,}")
     cols[1].metric("Average review score", number(reviewed["review_score"].mean(), 2))
-    cols[2].metric("Negative review rate", percent(reviewed["is_negative_review"].mean()))
-    timing["Delivery timing"] = pd.Categorical(timing["Delivery timing"].astype(str), categories=list(reversed(labels)), ordered=True)
-    timing = timing.sort_values("Delivery timing")
-    fig = px.bar(
-        timing, x="Delivery timing", y="Average review score",
-        hover_data={"Negative review rate": ":.1%", "Reviewed orders": ":,"},
-        title="Review score by delivery timing relative to the promise",
-        color="Average review score", color_continuous_scale="RdYlGn", text="Reviewed orders",
+    cols[2].metric(
+        "Negative review rate", percent(reviewed["is_negative_review"].mean()),
+        help="Share of reviewed delivered orders classified as a negative review under the Phase 1 prepared-data definition.",
     )
-    fig.update_traces(texttemplate="%{y:.2f}<br>n=%{text:,.0f}", textposition="outside", cliponaxis=False)
-    fig.update_yaxes(range=[1, 5.4])
-    fig.update_layout(coloraxis_showscale=False)
-    chart(styled(fig, 460), "experience-timing")
 
-    geography = valid.dropna(subset=["route_type"]).copy()
-    if not geography.empty:
-        route = geography.groupby("route_type", as_index=False).agg(
-            **{"Median delivery days": ("delivery_days", "median"), "Late delivery rate": ("is_late", "mean"), "Eligible orders": ("order_id", "nunique")}
-        ).rename(columns={"route_type": "Route"})
-        left, right = st.columns(2)
-        with left:
-            fig = px.bar(
-                route, x="Route", y="Median delivery days", hover_data={"Eligible orders": ":,"},
-                title="Median delivery time by route type", color="Route",
-                color_discrete_map={"Same state": GREEN, "Cross state": ORANGE},
-            )
-            add_bar_labels(fig, value_format=",.1f")
-            chart(styled(fig), "experience-route-days")
-        with right:
-            fig = px.bar(
-                route, x="Route", y="Late delivery rate", hover_data={"Eligible orders": ":,"},
-                title="Late delivery rate by route type", color="Route",
-                color_discrete_map={"Same state": GREEN, "Cross state": RED},
-            )
-            fig.update_traces(texttemplate="%{y:.1%}", textposition="outside", cliponaxis=False)
-            fig.update_yaxes(tickformat=".0%")
-            chart(styled(fig), "experience-route-late")
-    delivery_heatmap(valid)
-    st.caption("These are descriptive associations, not causal estimates. Seller state is the dominant seller state for an order.")
+    left, right = st.columns(2)
+    with left:
+        fig = px.bar(
+            timing, x="Delivery timing", y="Average review score",
+            title="Average review score by delivery timing",
+            text="Average review score", color_discrete_sequence=[BLUE],
+            hover_data={"Reviewed orders": ":,", "Negative review rate": ":.1%"},
+        )
+        fig.update_traces(texttemplate="%{text:.2f}", textposition="outside", cliponaxis=False)
+        fig.update_yaxes(title="Average review score (1–5)", range=[1, 5.4])
+        fig.update_xaxes(title="Delivery timing relative to promise", tickangle=-35)
+        chart(styled(fig, 450), "experience-review-score")
+
+    with right:
+        fig = px.bar(
+            timing, x="Delivery timing", y="Negative review rate",
+            title="Negative review rate by delivery timing",
+            text="Negative review rate", color_discrete_sequence=[RED],
+            hover_data={"Reviewed orders": ":,", "Average review score": ":.2f"},
+        )
+        fig.update_traces(texttemplate="%{text:.1%}", textposition="outside", cliponaxis=False)
+        fig.update_yaxes(title="Negative review rate", tickformat=".0%", rangemode="tozero")
+        fig.update_xaxes(title="Delivery timing relative to promise", tickangle=-35)
+        chart(styled(fig, 450), "experience-negative-review-rate")
+
+    st.caption("Both charts use the same delivery-timing bands so they can be read in parallel. Geography is intentionally left to the global filters rather than shown as unrelated route visuals on this page.")
 
 
 def _child_options(data: pd.DataFrame, parent_column: str, parents, child_column: str) -> list[str]:
