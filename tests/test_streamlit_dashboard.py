@@ -137,12 +137,16 @@ def test_all_visuals_use_the_same_multi_filtered_population(monkeypatch):
     assert sum(category_bar.x) == 2
 
     quote_fig = figures["promise-quoted-actual"]
-    quote_orders = sum(trace.customdata[:, 0].astype(float).sum() for trace in quote_fig.data if getattr(trace, "customdata", None) is not None)
-    assert quote_orders == 2
+    assert [trace.name for trace in quote_fig.data] == ["Delivered orders", "Median actual delivery", "Actual = promised"]
+    assert len(quote_fig.data[0].x) == 2
+    assert sum(quote_fig.data[1].customdata[:, 0].astype(float)) == 2
+    assert quote_fig.layout.showlegend is not False
 
     timing_fig = figures["promise-timing-counts"]
-    timing_orders = sum(trace.customdata[:, 0].astype(float).sum() for trace in timing_fig.data if getattr(trace, "customdata", None) is not None)
+    assert {trace.name for trace in timing_fig.data} == {"Early", "Late"}
+    timing_orders = sum(trace.customdata[:, 0].astype(float).sum() for trace in timing_fig.data)
     assert timing_orders == 2
+    assert timing_fig.layout.showlegend is not False
 
     region_heatmap = figures["promise-region-heatmap"].data[0]
     southeast_idx = app.REGION_ORDER.index("Southeast")
@@ -155,6 +159,9 @@ def test_all_visuals_use_the_same_multi_filtered_population(monkeypatch):
     assert len(negative_rate_fig.data) == 1
     assert sum(review_score_fig.data[0].customdata[:, 0].astype(float)) == 2
     assert sum(negative_rate_fig.data[0].customdata[:, 0].astype(float)) == 2
+    assert review_score_fig.data[0].marker.showscale is True
+    assert negative_rate_fig.data[0].marker.showscale is True
+    assert review_score_fig.data[0].marker.colorscale != negative_rate_fig.data[0].marker.colorscale
 
 
 def test_orders_pareto_top_10_plus_others_uses_full_population():
