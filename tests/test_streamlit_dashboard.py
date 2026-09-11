@@ -25,29 +25,14 @@ class _FakeColumn:
 
 
 class _FakeStreamlit:
-    def header(self, *args, **kwargs):
-        return None
-
-    def subheader(self, *args, **kwargs):
-        return None
-
-    def caption(self, *args, **kwargs):
-        return None
-
-    def info(self, *args, **kwargs):
-        return None
-
-    def warning(self, *args, **kwargs):
-        return None
-
-    def columns(self, count):
-        return [_FakeColumn() for _ in range(count)]
-
-    def radio(self, label, options, **kwargs):
-        return options[0]
-
-    def slider(self, *args, **kwargs):
-        return 1
+    def header(self, *args, **kwargs): return None
+    def subheader(self, *args, **kwargs): return None
+    def caption(self, *args, **kwargs): return None
+    def info(self, *args, **kwargs): return None
+    def warning(self, *args, **kwargs): return None
+    def columns(self, count): return [_FakeColumn() for _ in range(count)]
+    def radio(self, label, options, **kwargs): return options[0]
+    def slider(self, *args, **kwargs): return 1
 
 
 def _frame() -> pd.DataFrame:
@@ -69,16 +54,8 @@ def _frame() -> pd.DataFrame:
 def _apply(frame, **overrides):
     args = dict(
         date_range=(pd.Timestamp("2017-01-01").date(), pd.Timestamp("2018-08-31").date()),
-        customer_regions=[],
-        customer_states=[],
-        customer_cities=[],
-        seller_regions=[],
-        seller_states=[],
-        route_types=[],
-        product_groups=[],
-        categories=[],
-        status_groups=[],
-        statuses=[],
+        customer_regions=[], customer_states=[], customer_cities=[], seller_regions=[], seller_states=[],
+        route_types=[], product_groups=[], categories=[], status_groups=[], statuses=[],
     )
     args.update(overrides)
     return app.apply_filters(frame, **args)
@@ -114,16 +91,10 @@ def test_multiple_parent_and_child_filters_are_anded_together():
     filtered = _apply(
         frame,
         date_range=(pd.Timestamp("2017-03-01").date(), pd.Timestamp("2017-04-30").date()),
-        customer_regions=["Southeast"],
-        customer_states=["SP"],
-        customer_cities=["sao paulo"],
-        seller_regions=["Southeast"],
-        seller_states=["SP"],
-        route_types=["Same state"],
-        product_groups=["Books, Media & Stationery"],
-        categories=["books_general_interest"],
-        status_groups=["Fulfilled"],
-        statuses=["delivered"],
+        customer_regions=["Southeast"], customer_states=["SP"], customer_cities=["sao paulo"],
+        seller_regions=["Southeast"], seller_states=["SP"], route_types=["Same state"],
+        product_groups=["Books, Media & Stationery"], categories=["books_general_interest"],
+        status_groups=["Fulfilled"], statuses=["delivered"],
     )
     assert list(filtered["order_id"]) == ["A1", "A2"]
 
@@ -151,31 +122,26 @@ def test_all_visuals_use_the_same_multi_filtered_population(monkeypatch):
 
     figures = {key: figure for key, figure in captured}
     expected_keys = {
-        "overview-orders", "overview-aov", "overview-geography-map", "overview-pareto",
+        "overview-geography-contribution", "overview-category-contribution",
         "promise-quoted-actual", "promise-timing-counts", "promise-region-heatmap",
         "experience-review-score", "experience-negative-review-rate",
     }
     assert expected_keys.issubset(figures), expected_keys.difference(figures)
-    assert sum(figures["overview-orders"].data[0].y) == 2
 
-    geography = figures["overview-geography-map"].data[0]
-    assert list(geography.text) == ["SP"]
-    assert float(geography.customdata[0][0]) == 2
+    geography_bar = figures["overview-geography-contribution"].data[0]
+    assert list(geography_bar.y) == ["Southeast"]
+    assert sum(geography_bar.x) == 2
 
-    pareto_bar = figures["overview-pareto"].data[0]
-    assert list(pareto_bar.x) == ["books_general_interest"]
-    assert sum(pareto_bar.y) == 2
+    category_bar = figures["overview-category-contribution"].data[0]
+    assert list(category_bar.y) == ["books_general_interest"]
+    assert sum(category_bar.x) == 2
 
     quote_fig = figures["promise-quoted-actual"]
     quote_orders = sum(trace.customdata[:, 0].astype(float).sum() for trace in quote_fig.data if getattr(trace, "customdata", None) is not None)
     assert quote_orders == 2
 
     timing_fig = figures["promise-timing-counts"]
-    timing_orders = sum(
-        trace.customdata[:, 0].astype(float).sum()
-        for trace in timing_fig.data
-        if getattr(trace, "customdata", None) is not None
-    )
+    timing_orders = sum(trace.customdata[:, 0].astype(float).sum() for trace in timing_fig.data if getattr(trace, "customdata", None) is not None)
     assert timing_orders == 2
 
     region_heatmap = figures["promise-region-heatmap"].data[0]
@@ -191,25 +157,26 @@ def test_all_visuals_use_the_same_multi_filtered_population(monkeypatch):
     assert sum(negative_rate_fig.data[0].customdata[:, 0].astype(float)) == 2
 
 
-def test_pareto_top_10_plus_others_uses_full_population(monkeypatch):
+def test_orders_pareto_top_10_plus_others_uses_full_population():
     frame = _frame()
     extra = []
     for i in range(12):
         extra.append(dict(
-            order_id=f"P{i}", customer_unique_id=f"PU{i}", purchase_date=pd.Timestamp("2017-05-01"),
-            order_status="delivered", customer_state="SP", customer_city="sao paulo", seller_state="SP",
-            product_category=f"cat_{i:02d}", total_item_value=float(200 - i * 5), review_score=5.0,
-            delivery_days=5.0, estimated_delivery_days=10.0, days_late=-5.0,
-            is_delivered_complete=True, is_late=False, is_negative_review=False,
+            order_id=f"P{i}", customer_unique_id=f"PU{i}", purchase_date=pd.Timestamp("2017-05-01"), order_status="delivered",
+            customer_state="SP", customer_city="sao paulo", seller_state="SP", product_category=f"cat_{i:02d}",
+            total_item_value=float(200 - i * 5), review_score=5.0, delivery_days=5.0, estimated_delivery_days=10.0,
+            days_late=-5.0, is_delivered_complete=True, is_late=False, is_negative_review=False,
         ))
     frame = app.enrich_dimensions(pd.concat([frame, pd.DataFrame(extra)], ignore_index=True))
-    captured = []
-    monkeypatch.setattr(app, "st", _FakeStreamlit())
-    monkeypatch.setattr(app, "chart", lambda figure, key: captured.append((key, figure)))
-    app.pareto_chart(frame)
-    figure = dict(captured)["overview-pareto"]
+    figure = app.contribution_figure(frame, "product_category", "Orders", "Test")
     bars, cumulative = figure.data[0], figure.data[1]
-    assert len(bars.x) == 11
-    assert bars.x[-1] == "Others"
-    assert abs(float(cumulative.y[-1]) - 1.0) < 1e-12
-    assert float(bars.y[-1]) > 0
+    assert len(bars.y) == 11
+    assert bars.y[-1] == "Others"
+    assert abs(float(cumulative.x[-1]) - 1.0) < 1e-12
+    assert float(bars.x[-1]) > 0
+
+
+def test_aov_contribution_is_ranked_not_pareto():
+    figure = app.contribution_figure(_frame(), "product_category", "AOV", "Test")
+    assert len(figure.data) == 1
+    assert figure.data[0].type == "bar"
