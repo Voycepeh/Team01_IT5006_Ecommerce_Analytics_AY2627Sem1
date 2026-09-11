@@ -283,7 +283,7 @@ def business_geography_map(frame: pd.DataFrame) -> None:
         "Average review score": ".2f",
     }
     prefixes = {"Orders": "", "GMV": "R$", "AOV": "R$", "Average review score": ""}
-    hover_metric = f"{prefixes[metric]}%{{customdata[4]:{value_formats[metric]}}}"
+    hover_metric = f"{prefixes[metric]}%{{marker.color:{value_formats[metric]}}}"
     fig = go.Figure(go.Scattergeo(
         lat=geo["lat"], lon=geo["lon"], text=geo["customer_state"], mode="markers+text",
         textposition="middle center",
@@ -296,7 +296,7 @@ def business_geography_map(frame: pd.DataFrame) -> None:
             "line": {"width": 1, "color": "white"},
             "opacity": 0.88,
         },
-        customdata=geo[["Orders", "GMV", "AOV", "Average review score", metric]],
+        customdata=geo[["Orders", "GMV", "AOV", "Average review score"]],
         hovertemplate=(
             "State: %{text}<br>"
             f"{metric}: {hover_metric}<br>"
