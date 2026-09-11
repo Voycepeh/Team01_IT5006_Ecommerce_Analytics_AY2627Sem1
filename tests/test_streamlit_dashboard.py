@@ -35,6 +35,7 @@ class _FakeStreamlit:
     def caption(self, *args, **kwargs): return None
     def info(self, *args, **kwargs): return None
     def warning(self, *args, **kwargs): return None
+    def divider(self, *args, **kwargs): return None
     def columns(self, count): return [_FakeColumn() for _ in range(count if isinstance(count, int) else len(count))]
     def radio(self, label, options, **kwargs): return options[0]
     def slider(self, *args, **kwargs): return 1
@@ -175,8 +176,10 @@ def test_all_visuals_use_the_same_multi_filtered_population(monkeypatch):
     assert len(negative_rate_fig.data) == 1
     assert sum(review_score_fig.data[0].customdata[:, 0].astype(float)) == 2
     assert sum(negative_rate_fig.data[0].customdata[:, 0].astype(float)) == 2
-    assert review_score_fig.data[0].marker.showscale is True
-    assert negative_rate_fig.data[0].marker.showscale is True
+    assert review_score_fig.data[0].marker.showscale is False
+    assert negative_rate_fig.data[0].marker.showscale is False
+    assert review_score_fig.layout.showlegend is False
+    assert negative_rate_fig.layout.showlegend is False
     assert review_score_fig.data[0].marker.colorscale != negative_rate_fig.data[0].marker.colorscale
 
 
