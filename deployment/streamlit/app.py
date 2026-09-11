@@ -154,9 +154,9 @@ def yoy_metric_figure(monthly: pd.DataFrame, metric: str, title: str) -> go.Figu
     for index, year in enumerate(sorted(data["Year"].unique())):
         year_data = data[data["Year"] == year].sort_values("Month number")
         if metric == "Orders":
-            hover = "%{x}<br>Orders: %{y:,.0f}<extra>%s</extra>" % year
+            hover = f"%{{x}}<br>Orders: %{{y:,.0f}}<extra>{year}</extra>"
         else:
-            hover = "%{x}<br>%s: R$%%{y:,.2f}<extra>%s</extra>" % (metric, year)
+            hover = f"%{{x}}<br>{metric}: R$%{{y:,.2f}}<extra>{year}</extra>"
         fig.add_trace(go.Scatter(
             x=year_data["Month label"], y=year_data[metric], mode="lines+markers", name=str(year),
             line={"width": 2.5, "color": YEAR_COLORS[index % len(YEAR_COLORS)]},
