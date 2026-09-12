@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import streamlit as st
 
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "processed" / "dashboard_orders.parquet"
@@ -17,6 +18,19 @@ RED = "#DC2626"
 GREY = "#64748B"
 YEAR_COLORS = [BLUE, ORANGE, GREEN, GREY, RED]
 MONTH_ORDER = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+DELIVERY_TIMING_ORDER = [
+    "30+ early",
+    "15–30 early",
+    "7–15 early",
+    "3–7 early",
+    "1–3 early",
+    "On time",
+    "1–3 late",
+    "3–7 late",
+    "7–15 late",
+    "15–30 late",
+    "30+ late",
+]
 
 BRAZIL_REGION = {
     "AC": "North", "AP": "North", "AM": "North", "PA": "North", "RO": "North", "RR": "North", "TO": "North",
@@ -185,6 +199,34 @@ def delivered_orders(frame: pd.DataFrame) -> pd.DataFrame:
     return frame[frame["is_delivered_complete"] & frame["delivery_days"].notna() & frame["estimated_delivery_days"].notna() & frame["days_late"].notna() & frame["is_late"].notna()].copy()
 
 
+def delivery_timing_band(days_late):
+    """Classify delivery timing with an explicit on-time bucket."""
+    if pd.isna(days_late):
+        return pd.NA
+    value = float(days_late)
+    if value <= -30:
+        return "30+ early"
+    if value <= -15:
+        return "15–30 early"
+    if value <= -7:
+        return "7–15 early"
+    if value <= -3:
+        return "3–7 early"
+    if value < 0:
+        return "1–3 early"
+    if value == 0:
+        return "On time"
+    if value <= 3:
+        return "1–3 late"
+    if value <= 7:
+        return "3–7 late"
+    if value <= 15:
+        return "7–15 late"
+    if value <= 30:
+        return "15–30 late"
+    return "30+ late"
+
+
 def page_insight(text: str) -> None:
     st.info(f"**What stands out:** {text}")
 
@@ -219,12 +261,71 @@ def yoy_metric_figure(monthly: pd.DataFrame, metric: str, title: str) -> go.Figu
     fig.update_layout(
         title=title,
         xaxis={"title": "Month", "categoryorder": "array", "categoryarray": MONTH_ORDER},
-        yaxis={"title": y_title, "tickformat": ","},
+        yaxis={"title": y_title, "tickformat": ",", "rangemode": "tozero"},
         legend={"title": "Year", "orientation": "h", "y": 1.14, "x": 0.5, "xanchor": "center"},
     )
     if metric in {"GMV", "AOV"}:
         fig.update_yaxes(tickprefix="R$")
     return styled(fig, 360)
+
+
+
+def overview_trend_figure(monthly: pd.DataFrame, view: str) -> go.Figure:
+    """Show order volume and AOV using either all-time or year-on-year framing."""
+    fig = make_subplots(rows=2, cols=1, shared_xaxes=view == "All-time trend", vertical_spacing=0.12)
+    if view == "All-time trend":
+        fig.add_trace(
+            go.Scatter(
+                x=monthly["Month"], y=monthly["Orders"], mode="lines+markers", name="Orders",
+                line={"color": BLUE, "width": 2.5}, marker={"size": 5},
+                hovertemplate="%{x|%b %Y}<br>Orders: %{y:,.0f}<extra></extra>",
+            ),
+            row=1, col=1,
+        )
+        fig.add_trace(
+            go.Scatter(
+                x=monthly["Month"], y=monthly["AOV"], mode="lines+markers", name="Average order value",
+                line={"color": ORANGE, "width": 2.5}, marker={"size": 5},
+                hovertemplate="%{x|%b %Y}<br>AOV: R$%{y:,.2f}<extra></extra>",
+            ),
+            row=2, col=1,
+        )
+        fig.update_xaxes(title_text="Purchase month", row=2, col=1)
+    else:
+        data = monthly.copy()
+        data["Year"] = data["Month"].dt.year
+        data["Month number"] = data["Month"].dt.month
+        data["Month label"] = data["Month"].dt.strftime("%b")
+        for index, year in enumerate(sorted(data["Year"].unique())):
+            year_data = data[data["Year"] == year].sort_values("Month number")
+            color = YEAR_COLORS[index % len(YEAR_COLORS)]
+            fig.add_trace(
+                go.Scatter(
+                    x=year_data["Month label"], y=year_data["Orders"], mode="lines+markers", name=str(year),
+                    legendgroup=str(year), line={"color": color, "width": 2.5}, marker={"size": 5},
+                    hovertemplate=f"%{{x}}<br>Orders: %{{y:,.0f}}<extra>{year}</extra>",
+                ),
+                row=1, col=1,
+            )
+            fig.add_trace(
+                go.Scatter(
+                    x=year_data["Month label"], y=year_data["AOV"], mode="lines+markers", name=str(year),
+                    legendgroup=str(year), showlegend=False, line={"color": color, "width": 2.5}, marker={"size": 5},
+                    hovertemplate=f"%{{x}}<br>AOV: R$%{{y:,.2f}}<extra>{year}</extra>",
+                ),
+                row=2, col=1,
+            )
+        fig.update_xaxes(categoryorder="array", categoryarray=MONTH_ORDER, row=1, col=1)
+        fig.update_xaxes(title_text="Month", categoryorder="array", categoryarray=MONTH_ORDER, row=2, col=1)
+
+    fig.update_yaxes(title_text="Orders", rangemode="tozero", row=1, col=1)
+    fig.update_yaxes(title_text="Average order value (R$)", tickprefix="R$", rangemode="tozero", row=2, col=1)
+    fig.update_layout(
+        title="Order volume and average order value over time",
+        legend={"title": "Year" if view == "Year-on-year" else "", "orientation": "h", "y": 1.08, "x": 0.5, "xanchor": "center"},
+        hovermode="x unified" if view == "All-time trend" else "closest",
+    )
+    return styled(fig, 610)
 
 
 def contribution_figure(frame: pd.DataFrame, dimension: str, metric: str, title: str) -> go.Figure:
@@ -312,6 +413,12 @@ def business_overview(frame: pd.DataFrame) -> None:
             f"GMV by {monthly.iloc[-1]['GMV'] / monthly.iloc[0]['GMV'] - 1:+.0%}, and AOV by {monthly.iloc[-1]['AOV'] / monthly.iloc[0]['AOV'] - 1:+.0%} from the first to last selected month."
         )
 
+    st.subheader("Business trend")
+    trend_view = _centered_pills("Trend view", ("All-time trend", "Year-on-year"), "overview-trend-view", "All-time trend")
+    chart(overview_trend_figure(monthly, trend_view), "overview-business-trend")
+    st.caption("All-time trend shows the full monthly trajectory; Year-on-year aligns calendar months for comparison. Both y-axes start at zero so small variations are not visually exaggerated.")
+    st.divider()
+
     metric_config = {
         "Orders": {"total_label": "Total Orders", "help": None},
         "GMV": {"total_label": "Total GMV", "help": "GMV = Gross Merchandise Value. Here it is the sum of item prices, excluding freight; it is not Olist revenue."},
@@ -354,6 +461,123 @@ def business_overview(frame: pd.DataFrame) -> None:
         chart(cat_fig, "overview-category-contribution") if cat_fig.data else st.info("No product category matches the current filters.")
 
     st.caption("Top contributors remain visible and the long tail is combined into Others where appropriate.")
+
+
+def delivery_timing_distribution_figure(valid: pd.DataFrame) -> go.Figure:
+    """Show the full distribution of delivery timing around the promised date."""
+    distribution = valid["days_from_promise"].dropna().astype(float)
+    fig = go.Figure(go.Histogram(
+        x=distribution,
+        nbinsx=min(max(int(distribution.nunique()), 20), 120),
+        marker_color=BLUE,
+        opacity=0.9,
+        hovertemplate="Days from promise: %{x}<br>Orders: %{y:,.0f}<extra></extra>",
+        showlegend=False,
+    ))
+    median_gap = float(distribution.median())
+    lower = float(distribution.quantile(0.005))
+    upper = float(distribution.quantile(0.995))
+    if lower == upper:
+        lower -= 1.0
+        upper += 1.0
+    padding = max((upper - lower) * 0.08, 5.0)
+    fig.add_vline(x=0, line_color=ORANGE, line_width=2)
+    fig.add_vline(x=median_gap, line_color=GREEN, line_width=2, line_dash="dash")
+    fig.update_layout(
+        title="How far deliveries land from the promised date",
+        xaxis={
+            "title": "Days from promised date (negative = early, 0 = on time, positive = late)",
+            "range": [lower - padding, upper + padding],
+        },
+        yaxis={"title": "Orders", "tickformat": ",", "rangemode": "tozero"},
+        bargap=0.02,
+    )
+    return styled(fig, 470)
+
+
+def delivery_stage_breakdown_figure(valid: pd.DataFrame) -> go.Figure:
+    """Compare median handling and transit days for on-time-or-early versus late deliveries."""
+    required_columns = {
+        "purchase_timestamp",
+        "order_delivered_carrier_date",
+        "order_delivered_customer_date",
+        "days_from_promise",
+        "order_id",
+    }
+    if not required_columns.issubset(valid.columns):
+        return go.Figure()
+
+    stage_frame = valid[list(required_columns)].copy()
+    for column in ("purchase_timestamp", "order_delivered_carrier_date", "order_delivered_customer_date"):
+        stage_frame[column] = pd.to_datetime(stage_frame[column], errors="coerce")
+    stage_frame = stage_frame.dropna(
+        subset=[
+            "purchase_timestamp",
+            "order_delivered_carrier_date",
+            "order_delivered_customer_date",
+            "days_from_promise",
+        ]
+    ).copy()
+    if stage_frame.empty:
+        return go.Figure()
+
+    stage_frame["handling_days"] = (
+        stage_frame["order_delivered_carrier_date"] - stage_frame["purchase_timestamp"]
+    ).dt.total_seconds() / 86400
+    stage_frame["transit_days"] = (
+        stage_frame["order_delivered_customer_date"] - stage_frame["order_delivered_carrier_date"]
+    ).dt.total_seconds() / 86400
+    stage_frame = stage_frame[
+        (stage_frame["handling_days"] >= 0) & (stage_frame["transit_days"] >= 0)
+    ].copy()
+    if stage_frame.empty:
+        return go.Figure()
+
+    stage_frame["Delivery outcome"] = stage_frame["days_from_promise"].astype(float).le(0).map(
+        {True: "On time or early", False: "Late"}
+    )
+    summary = stage_frame.groupby("Delivery outcome", as_index=False).agg(
+        **{
+            "Handling days": ("handling_days", "median"),
+            "Transit days": ("transit_days", "median"),
+            "Orders": ("order_id", "nunique"),
+        }
+    )
+    outcome_order = ["Late", "On time or early"]
+    summary["Delivery outcome"] = pd.Categorical(
+        summary["Delivery outcome"], categories=outcome_order, ordered=True
+    )
+    summary = summary.sort_values("Delivery outcome")
+    if summary.empty:
+        return go.Figure()
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        y=summary["Delivery outcome"],
+        x=summary["Handling days"],
+        name="Handling days",
+        orientation="h",
+        marker_color=BLUE,
+        customdata=summary[["Orders"]],
+        hovertemplate="%{y}<br>Median handling days: %{x:.1f}<br>Orders: %{customdata[0]:,.0f}<extra></extra>",
+    ))
+    fig.add_trace(go.Bar(
+        y=summary["Delivery outcome"],
+        x=summary["Transit days"],
+        name="Transit days",
+        orientation="h",
+        marker_color=ORANGE,
+        customdata=summary[["Orders"]],
+        hovertemplate="%{y}<br>Median transit days: %{x:.1f}<br>Orders: %{customdata[0]:,.0f}<extra></extra>",
+    ))
+    fig.update_layout(
+        title="Where delivery time goes: handling vs transit",
+        xaxis={"title": "Median days", "rangemode": "tozero"},
+        yaxis={"title": ""},
+        barmode="stack",
+        legend={"orientation": "h", "y": 1.14, "x": 0.5, "xanchor": "center"},
+    )
+    return styled(fig, 470)
 
 
 def region_late_heatmap(valid: pd.DataFrame) -> None:
@@ -428,12 +652,12 @@ def delivery_promise(frame: pd.DataFrame) -> None:
         st.caption("Each point is a delivered order. The orange line shows median actual delivery for sufficiently populated promise-day values; the dashed line marks actual = promised.")
 
     with right:
-        bins = [-999, -30, -15, -7, -3, 0, 3, 7, 15, 30, 999]
-        labels = ["30+ early", "15–30 early", "7–15 early", "3–7 early", "0–3 early", "0–3 late", "3–7 late", "7–15 late", "15–30 late", "30+ late"]
-        valid["Delivery timing"] = pd.cut(valid["days_from_promise"], bins=bins, labels=labels, ordered=True)
+        valid["Delivery timing"] = valid["days_from_promise"].map(delivery_timing_band)
+        valid["Delivery timing"] = pd.Categorical(valid["Delivery timing"], categories=DELIVERY_TIMING_ORDER, ordered=True)
         counts = valid.dropna(subset=["Delivery timing"]).groupby("Delivery timing", observed=False)["order_id"].nunique().rename("Orders").reset_index()
         counts["Delivery timing"] = counts["Delivery timing"].astype(str)
         early = counts[counts["Delivery timing"].str.contains("early")]
+        on_time = counts[counts["Delivery timing"].eq("On time")]
         late = counts[counts["Delivery timing"].str.contains("late")]
         count_max = max(float(counts["Orders"].max()), 1.0)
         fig = go.Figure()
@@ -443,43 +667,59 @@ def delivery_promise(frame: pd.DataFrame) -> None:
             customdata=early[["Orders"]], hovertemplate="%{x}<br>Orders: %{y:,.0f}<extra></extra>",
         ))
         fig.add_trace(go.Bar(
+            x=on_time["Delivery timing"], y=on_time["Orders"], name="On time", marker_color=BLUE,
+            text=on_time["Orders"], texttemplate="%{text:,.0f}", textposition="outside", textfont={"size": 10}, cliponaxis=False,
+            customdata=on_time[["Orders"]], hovertemplate="%{x}<br>Orders: %{y:,.0f}<extra></extra>",
+        ))
+        fig.add_trace(go.Bar(
             x=late["Delivery timing"], y=late["Orders"], name="Late", marker_color=RED,
             text=late["Orders"], texttemplate="%{text:,.0f}", textposition="outside", textfont={"size": 10}, cliponaxis=False,
             customdata=late[["Orders"]], hovertemplate="%{x}<br>Orders: %{y:,.0f}<extra></extra>",
         ))
         fig.update_layout(
             title="Orders by timing relative to promise",
-            xaxis={"title": "Days from promise (early ← promise → late)", "categoryorder": "array", "categoryarray": labels, "tickangle": -35},
+            xaxis={"title": "Delivery timing relative to promised date", "categoryorder": "array", "categoryarray": DELIVERY_TIMING_ORDER, "tickangle": -35},
             yaxis={"title": "Orders", "tickformat": ",", "range": [0, count_max * 1.18]},
             barmode="group",
             legend={"orientation": "h", "y": 1.14, "x": 0},
         )
         chart(styled(fig, 470), "promise-timing-counts")
-        st.caption("Green bars are early deliveries and red bars are late deliveries; bar height shows the number of orders in each timing band.")
+        st.caption("Green bars are early deliveries, blue is exactly on the promised date (0 days), and red bars are late deliveries; bar height shows the number of orders in each timing band.")
+
+    detail_left, detail_right = st.columns(2)
+    with detail_left:
+        chart(delivery_timing_distribution_figure(valid), "promise-timing-distribution")
+        st.caption("This histogram shows the full spread of delivery timing around the promised date. The orange reference line marks the promised date itself (0 days) and the green dashed line marks the median delivered order.")
+
+    with detail_right:
+        stage_figure = delivery_stage_breakdown_figure(valid)
+        if stage_figure.data:
+            chart(stage_figure, "promise-stage-breakdown")
+            st.caption("Handling days run from purchase to carrier handoff, while transit days run from carrier handoff to customer delivery. Bars show median stage lengths for on-time-or-early versus late deliveries.")
+        else:
+            st.info("Handling-versus-transit breakdown is unavailable because the required delivery-stage timestamps are missing for the current filters.")
 
     region_late_heatmap(valid)
     st.caption(f"Delivery analysis uses {valid['order_id'].nunique():,} eligible completed delivered orders under the current filters.")
 
 
 def delivery_experience(frame: pd.DataFrame) -> None:
-    st.header("Negative Review Analysis")
-    st.caption("Assess how delivery timing relates to customer review outcomes, focusing on average review score and negative review rate.")
+    st.header("Negative Review Analysis (Review Score < 3)")
+    st.caption("A negative review is explicitly defined as a review score of 1 or 2. Assess how delivery timing relates to average review score and the share of reviews below 3 stars.")
     reviewed = delivered_orders(frame).dropna(subset=["review_score", "is_negative_review"]).copy()
     if reviewed.empty:
         st.info("No reviewed orders with valid delivery outcomes match the filters.")
         return
-    reviewed["days_early"] = -reviewed["days_late"].astype(float)
-    bins = [-999, -30, -15, -7, -3, 0, 3, 7, 15, 999]
-    labels = ["30+ late", "15–30 late", "7–15 late", "3–7 late", "0–3 late", "0–3 early", "3–7 early", "7–15 early", "15+ early"]
-    reviewed["Delivery timing"] = pd.cut(reviewed["days_early"], bins=bins, labels=labels, ordered=True)
+    reviewed["Delivery timing"] = reviewed["days_late"].map(delivery_timing_band)
+    reviewed["Delivery timing"] = pd.Categorical(reviewed["Delivery timing"], categories=DELIVERY_TIMING_ORDER, ordered=True)
     timing = reviewed.dropna(subset=["Delivery timing"]).groupby("Delivery timing", observed=False, as_index=False).agg(**{"Average review score": ("review_score", "mean"), "Negative review rate": ("is_negative_review", "mean"), "Reviewed orders": ("order_id", "nunique")})
-    timing["Delivery timing"] = pd.Categorical(timing["Delivery timing"].astype(str), categories=labels, ordered=True)
-    timing = timing.sort_values("Delivery timing", ascending=False)
+    timing["Delivery timing"] = pd.Categorical(timing["Delivery timing"].astype(str), categories=DELIVERY_TIMING_ORDER, ordered=True)
+    timing = timing.sort_values("Delivery timing")
     page_insight("Average review scores fall and negative review rates rise as deliveries move further past the promised date. This is an exploratory association, not evidence of causation.")
     cols = st.columns(3)
     cols[0].metric("Reviewed delivered orders", f"{reviewed['order_id'].nunique():,}")
     cols[1].metric("Average review score", number(reviewed["review_score"].mean(), 2))
-    cols[2].metric("Negative review rate", percent(reviewed["is_negative_review"].mean()), help="Share of reviewed delivered orders classified as a negative review under the Phase 1 prepared-data definition.")
+    cols[2].metric("Negative review rate (<3 stars)", percent(reviewed["is_negative_review"].mean()), help="Share of reviewed delivered orders with review score 1 or 2.")
 
     left, right = st.columns(2)
     with left:
@@ -504,12 +744,12 @@ def delivery_experience(frame: pd.DataFrame) -> None:
             customdata=timing[["Reviewed orders", "Average review score"]],
             hovertemplate="%{x}<br>Negative review rate: %{y:.1%}<br>Reviewed orders: %{customdata[0]:,.0f}<br>Average review score: %{customdata[1]:.2f}<extra></extra>",
         ))
-        fig.update_layout(title="Negative review rate by delivery timing", showlegend=False)
-        fig.update_yaxes(title="Negative review rate", tickformat=".0%", range=[0, min(negative_max * 1.22, 1.08)])
+        fig.update_layout(title="Negative review rate (Review Score < 3) by delivery timing", showlegend=False)
+        fig.update_yaxes(title="Negative review rate (<3 stars)", tickformat=".0%", range=[0, min(negative_max * 1.22, 1.08)])
         fig.update_xaxes(title="Delivery timing relative to promise", tickangle=-35)
         chart(styled(fig, 470), "experience-negative-review-rate")
 
-    st.caption("Both charts use the same early-to-late timing order. Colour has the same meaning in both: green = better customer outcome, red = worse customer outcome.")
+    st.caption("Both charts use the same 30+ days early to 30+ days late timing bands, with an explicit On time (0 days) category. Negative review means review score 1 or 2. Colour has the same meaning in both: green = better customer outcome, red = worse customer outcome.")
 
 
 def _child_options(data: pd.DataFrame, parent_column: str, parents, child_column: str) -> list[str]:
