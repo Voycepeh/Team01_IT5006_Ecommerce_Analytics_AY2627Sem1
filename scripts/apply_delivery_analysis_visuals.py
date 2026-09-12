@@ -160,3 +160,16 @@ if "promise-timing-distribution" not in text:
     text = replace_once(text, row_old, row_new)
 
 path.write_text(text, encoding="utf-8")
+
+test_path = Path("tests/test_streamlit_dashboard.py")
+test_text = test_path.read_text(encoding="utf-8")
+test_text = test_text.replace(
+    'assert {trace.name for trace in timing_fig.data} == {"Early", "Late"}',
+    'assert {trace.name for trace in timing_fig.data} == {"Early", "On time", "Late"}',
+)
+if '"promise-timing-distribution", "promise-region-heatmap"' not in test_text:
+    test_text = test_text.replace(
+        '"promise-quoted-actual", "promise-timing-counts", "promise-region-heatmap",',
+        '"promise-quoted-actual", "promise-timing-counts", "promise-timing-distribution", "promise-region-heatmap",',
+    )
+test_path.write_text(test_text, encoding="utf-8")
