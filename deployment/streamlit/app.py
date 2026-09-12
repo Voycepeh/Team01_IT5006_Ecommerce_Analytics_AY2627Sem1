@@ -7,6 +7,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import streamlit as st
 
+from review_correlation import correlation_figure, review_correlation_data
+
 DATA_PATH = Path(__file__).resolve().parents[2] / "data" / "processed" / "dashboard_orders.parquet"
 ANALYSIS_START = pd.Timestamp("2017-01-01")
 ANALYSIS_END = pd.Timestamp("2018-08-31")
@@ -267,8 +269,6 @@ def yoy_metric_figure(monthly: pd.DataFrame, metric: str, title: str) -> go.Figu
     if metric in {"GMV", "AOV"}:
         fig.update_yaxes(tickprefix="R$")
     return styled(fig, 360)
-
-
 
 
 def all_time_metric_figure(monthly: pd.DataFrame, metric: str, title: str) -> go.Figure:
@@ -716,6 +716,23 @@ def delivery_experience(frame: pd.DataFrame) -> None:
         chart(styled(fig, 470), "experience-negative-review-rate")
 
     st.caption("Both charts use the same 30+ days early to 30+ days late timing bands, with an explicit On time (0 days) category. Negative review means review score 1 or 2. Colour has the same meaning in both: green = better customer outcome, red = worse customer outcome.")
+
+    st.divider()
+    st.subheader("Review score correlations")
+    st.caption("This reuses the Phase 1 Pearson correlation analysis from the EDA notebook and focuses it on factors associated with review score.")
+    correlations = review_correlation_data(reviewed)
+    if correlations.empty:
+        st.info("There are not enough varying numeric review-related features to calculate correlations for the current filters.")
+    else:
+        strongest = correlations.iloc[correlations["Pearson r"].abs().argmax()]
+        direction = "negative" if strongest["Pearson r"] < 0 else "positive"
+        st.info(
+            f"**What stands out:** The strongest displayed linear association with review score is "
+            f"{strongest['Feature']} (r = {strongest['Pearson r']:+.2f}), a {direction} relationship. "
+            "This is exploratory association, not evidence of causation."
+        )
+        chart(correlation_figure(correlations), "experience-review-correlations")
+        st.caption("Pearson r ranges from -1 to +1. Values near 0 indicate little linear association; values farther from 0 indicate stronger linear association. Correlation does not imply causation.")
 
 
 def _child_options(data: pd.DataFrame, parent_column: str, parents, child_column: str) -> list[str]:
