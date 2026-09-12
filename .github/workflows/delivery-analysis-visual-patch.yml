@@ -1,0 +1,54 @@
+name: Apply delivery analysis visual patch
+
+on:
+  push:
+    branches:
+      - feature/dashboard-timing-clarity
+
+permissions:
+  contents: write
+
+jobs:
+  patch-dashboard:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/dashboard-timing-clarity
+          fetch-depth: 0
+
+      - name: Apply delivery analysis visual changes
+        run: python scripts/apply_delivery_analysis_visuals.py
+
+      - name: Validate syntax and targeted changes
+        run: |
+          python -m py_compile deployment/streamlit/app.py
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('deployment/streamlit/app.py').read_text(encoding='utf-8')
+          required_snippets = [
+              'def delivery_timing_distribution_figure(valid: pd.DataFrame) -> go.Figure:',
+              'def delivery_stage_breakdown_figure(valid: pd.DataFrame) -> go.Figure:',
+              'How far deliveries land from the promised date',
+              'Where delivery time goes: handling vs transit',
+              'promise-timing-distribution',
+              'promise-stage-breakdown',
+          ]
+          missing = [snippet for snippet in required_snippets if snippet not in text]
+          if missing:
+              raise SystemExit(f'Missing expected delivery-visual snippets: {missing}')
+          print('Targeted delivery-analysis visual checks passed')
+          PY
+
+      - name: Commit dashboard changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/streamlit/app.py
+          if git diff --cached --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git commit -m "Add delivery analysis supporting visuals"
+          git push
