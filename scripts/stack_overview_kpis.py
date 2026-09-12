@@ -1,0 +1,14 @@
+from pathlib import Path
+
+path = Path("deployment/streamlit/app.py")
+text = path.read_text(encoding="utf-8")
+
+old = '''    for metric in ("Orders", "GMV", "AOV"):\n        st.subheader(metric)\n        kpi_col, chart_col = st.columns([1, 2])\n        with kpi_col:\n            total_value = _overview_metric_value(frame, metric)\n            kpi_col.metric(metric_config[metric]["total_label"], _overview_metric_text(total_value, metric), help=metric_config[metric]["help"], border=True)\n            year_cols = st.columns(2)\n            for year_col, year in zip(year_cols, (2017, 2018)):\n                year_frame = frame[frame["purchase_date"].dt.year == year]\n                year_value = _overview_metric_value(year_frame, metric)\n                year_col.metric(str(year), _overview_metric_text(year_value, metric), border=True)\n        with chart_col:\n            trend_view = _centered_pills(\n                f"{metric} trend view",\n                ("All-time trend", "Year-on-year"),\n                f"overview-{metric.lower()}-trend-view",\n                "All-time trend",\n            )\n            figure = (\n                all_time_metric_figure(monthly, metric, f"Monthly {metric} over time")\n                if trend_view == "All-time trend"\n                else yoy_metric_figure(monthly, metric, f"Monthly {metric} by year")\n            )\n            chart(figure, f"overview-{metric.lower()}-yoy")\n        st.divider()\n'''
+
+new = '''    for metric in ("Orders", "GMV", "AOV"):\n        st.subheader(metric)\n\n        total_value = _overview_metric_value(frame, metric)\n        kpi_cols = st.columns(3)\n        kpi_cols[0].metric(\n            metric_config[metric]["total_label"],\n            _overview_metric_text(total_value, metric),\n            help=metric_config[metric]["help"],\n            border=True,\n        )\n        for kpi_col, year in zip(kpi_cols[1:], (2017, 2018)):\n            year_frame = frame[frame["purchase_date"].dt.year == year]\n            year_value = _overview_metric_value(year_frame, metric)\n            kpi_col.metric(str(year), _overview_metric_text(year_value, metric), border=True)\n\n        trend_view = _centered_pills(\n            f"{metric} trend view",\n            ("All-time trend", "Year-on-year"),\n            f"overview-{metric.lower()}-trend-view",\n            "All-time trend",\n        )\n        figure = (\n            all_time_metric_figure(monthly, metric, f"Monthly {metric} over time")\n            if trend_view == "All-time trend"\n            else yoy_metric_figure(monthly, metric, f"Monthly {metric} by year")\n        )\n        chart(figure, f"overview-{metric.lower()}-yoy")\n        st.divider()\n'''
+
+if old not in text:
+    raise RuntimeError("Expected Overview metric layout block was not found")
+
+text = text.replace(old, new, 1)
+path.write_text(text, encoding="utf-8")
