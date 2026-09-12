@@ -140,7 +140,7 @@ def test_all_visuals_use_the_same_multi_filtered_population(monkeypatch):
     expected_keys = {
         "overview-orders-yoy", "overview-gmv-yoy", "overview-aov-yoy",
         "overview-geography-contribution", "overview-category-contribution",
-        "promise-quoted-actual", "promise-timing-counts", "promise-region-heatmap",
+        "promise-quoted-actual", "promise-timing-counts", "promise-timing-distribution", "promise-region-heatmap",
         "experience-review-score", "experience-negative-review-rate",
     }
     assert expected_keys.issubset(figures), expected_keys.difference(figures)
@@ -160,7 +160,7 @@ def test_all_visuals_use_the_same_multi_filtered_population(monkeypatch):
     assert quote_fig.layout.showlegend is not False
 
     timing_fig = figures["promise-timing-counts"]
-    assert {trace.name for trace in timing_fig.data} == {"Early", "Late"}
+    assert {trace.name for trace in timing_fig.data} == {"Early", "On time", "Late"}
     timing_orders = sum(trace.customdata[:, 0].astype(float).sum() for trace in timing_fig.data)
     assert timing_orders == 2
     assert timing_fig.layout.showlegend is not False
