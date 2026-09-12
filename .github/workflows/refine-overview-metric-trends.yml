@@ -1,0 +1,53 @@
+name: Refine overview metric trends
+
+on:
+  push:
+    branches:
+      - feature/dashboard-timing-clarity
+
+permissions:
+  contents: write
+
+jobs:
+  patch-dashboard:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: feature/dashboard-timing-clarity
+          fetch-depth: 0
+
+      - name: Apply overview refinement
+        run: python scripts/refine_overview_metric_trends.py
+
+      - name: Validate syntax
+        run: |
+          python -m py_compile deployment/streamlit/app.py
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('deployment/streamlit/app.py').read_text(encoding='utf-8')
+          checks = {
+              'combined trend removed': 'overview-business-trend' not in text,
+              'all-time helper exists': 'def all_time_metric_figure' in text,
+              'orders toggle exists': 'overview-orders-trend-view' in text,
+              'gmv toggle exists': 'overview-gmv-trend-view' in text,
+              'aov toggle exists': 'overview-aov-trend-view' in text,
+          }
+          failed = [name for name, passed in checks.items() if not passed]
+          if failed:
+              raise SystemExit(f'Overview refinement validation failed: {failed}')
+          print('Overview refinement validation passed')
+          PY
+
+      - name: Commit dashboard changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/streamlit/app.py
+          if git diff --cached --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git commit -m "Refine overview metric trend toggles"
+          git push
