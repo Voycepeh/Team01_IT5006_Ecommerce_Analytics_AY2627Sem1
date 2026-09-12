@@ -30,9 +30,9 @@ jobs:
           checks = {
               'combined trend removed': 'overview-business-trend' not in text,
               'all-time helper exists': 'def all_time_metric_figure' in text,
-              'orders toggle exists': 'overview-orders-trend-view' in text,
-              'gmv toggle exists': 'overview-gmv-trend-view' in text,
-              'aov toggle exists': 'overview-aov-trend-view' in text,
+              'per-metric trend toggle exists': 'f"overview-{metric.lower()}-trend-view"' in text,
+              'all-time chart path exists': 'all_time_metric_figure(monthly, metric' in text,
+              'year-on-year chart path exists': 'yoy_metric_figure(monthly, metric' in text,
           }
           failed = [name for name, passed in checks.items() if not passed]
           if failed:
