@@ -270,62 +270,23 @@ def yoy_metric_figure(monthly: pd.DataFrame, metric: str, title: str) -> go.Figu
 
 
 
-def overview_trend_figure(monthly: pd.DataFrame, view: str) -> go.Figure:
-    """Show order volume and AOV using either all-time or year-on-year framing."""
-    fig = make_subplots(rows=2, cols=1, shared_xaxes=view == "All-time trend", vertical_spacing=0.12)
-    if view == "All-time trend":
-        fig.add_trace(
-            go.Scatter(
-                x=monthly["Month"], y=monthly["Orders"], mode="lines+markers", name="Orders",
-                line={"color": BLUE, "width": 2.5}, marker={"size": 5},
-                hovertemplate="%{x|%b %Y}<br>Orders: %{y:,.0f}<extra></extra>",
-            ),
-            row=1, col=1,
-        )
-        fig.add_trace(
-            go.Scatter(
-                x=monthly["Month"], y=monthly["AOV"], mode="lines+markers", name="Average order value",
-                line={"color": ORANGE, "width": 2.5}, marker={"size": 5},
-                hovertemplate="%{x|%b %Y}<br>AOV: R$%{y:,.2f}<extra></extra>",
-            ),
-            row=2, col=1,
-        )
-        fig.update_xaxes(title_text="Purchase month", row=2, col=1)
-    else:
-        data = monthly.copy()
-        data["Year"] = data["Month"].dt.year
-        data["Month number"] = data["Month"].dt.month
-        data["Month label"] = data["Month"].dt.strftime("%b")
-        for index, year in enumerate(sorted(data["Year"].unique())):
-            year_data = data[data["Year"] == year].sort_values("Month number")
-            color = YEAR_COLORS[index % len(YEAR_COLORS)]
-            fig.add_trace(
-                go.Scatter(
-                    x=year_data["Month label"], y=year_data["Orders"], mode="lines+markers", name=str(year),
-                    legendgroup=str(year), line={"color": color, "width": 2.5}, marker={"size": 5},
-                    hovertemplate=f"%{{x}}<br>Orders: %{{y:,.0f}}<extra>{year}</extra>",
-                ),
-                row=1, col=1,
-            )
-            fig.add_trace(
-                go.Scatter(
-                    x=year_data["Month label"], y=year_data["AOV"], mode="lines+markers", name=str(year),
-                    legendgroup=str(year), showlegend=False, line={"color": color, "width": 2.5}, marker={"size": 5},
-                    hovertemplate=f"%{{x}}<br>AOV: R$%{{y:,.2f}}<extra>{year}</extra>",
-                ),
-                row=2, col=1,
-            )
-        fig.update_xaxes(categoryorder="array", categoryarray=MONTH_ORDER, row=1, col=1)
-        fig.update_xaxes(title_text="Month", categoryorder="array", categoryarray=MONTH_ORDER, row=2, col=1)
 
-    fig.update_yaxes(title_text="Orders", rangemode="tozero", row=1, col=1)
-    fig.update_yaxes(title_text="Average order value (R$)", tickprefix="R$", rangemode="tozero", row=2, col=1)
+def all_time_metric_figure(monthly: pd.DataFrame, metric: str, title: str) -> go.Figure:
+    y_title = "Orders" if metric == "Orders" else ("Gross merchandise value (R$)" if metric == "GMV" else "Average order value (R$)")
+    hover = "%{x|%b %Y}<br>Orders: %{y:,.0f}<extra></extra>" if metric == "Orders" else f"%{{x|%b %Y}}<br>{metric}: R$%{{y:,.2f}}<extra></extra>"
+    fig = go.Figure(go.Scatter(
+        x=monthly["Month"], y=monthly[metric], mode="lines+markers",
+        line={"width": 2.5, "color": BLUE}, marker={"size": 6},
+        hovertemplate=hover, showlegend=False,
+    ))
     fig.update_layout(
-        title="Order volume and average order value over time",
-        legend={"title": "Year" if view == "Year-on-year" else "", "orientation": "h", "y": 1.08, "x": 0.5, "xanchor": "center"},
-        hovermode="x unified" if view == "All-time trend" else "closest",
+        title=title,
+        xaxis={"title": "Purchase month"},
+        yaxis={"title": y_title, "tickformat": ",", "rangemode": "tozero"},
     )
-    return styled(fig, 610)
+    if metric in {"GMV", "AOV"}:
+        fig.update_yaxes(tickprefix="R$")
+    return styled(fig, 360)
 
 
 def contribution_figure(frame: pd.DataFrame, dimension: str, metric: str, title: str) -> go.Figure:
@@ -413,12 +374,6 @@ def business_overview(frame: pd.DataFrame) -> None:
             f"GMV by {monthly.iloc[-1]['GMV'] / monthly.iloc[0]['GMV'] - 1:+.0%}, and AOV by {monthly.iloc[-1]['AOV'] / monthly.iloc[0]['AOV'] - 1:+.0%} from the first to last selected month."
         )
 
-    st.subheader("Business trend")
-    trend_view = _centered_pills("Trend view", ("All-time trend", "Year-on-year"), "overview-trend-view", "All-time trend")
-    chart(overview_trend_figure(monthly, trend_view), "overview-business-trend")
-    st.caption("All-time trend shows the full monthly trajectory; Year-on-year aligns calendar months for comparison. Both y-axes start at zero so small variations are not visually exaggerated.")
-    st.divider()
-
     metric_config = {
         "Orders": {"total_label": "Total Orders", "help": None},
         "GMV": {"total_label": "Total GMV", "help": "GMV = Gross Merchandise Value. Here it is the sum of item prices, excluding freight; it is not Olist revenue."},
@@ -437,10 +392,21 @@ def business_overview(frame: pd.DataFrame) -> None:
                 year_value = _overview_metric_value(year_frame, metric)
                 year_col.metric(str(year), _overview_metric_text(year_value, metric), border=True)
         with chart_col:
-            chart(yoy_metric_figure(monthly, metric, f"Monthly {metric} by year"), f"overview-{metric.lower()}-yoy")
+            trend_view = _centered_pills(
+                f"{metric} trend view",
+                ("All-time trend", "Year-on-year"),
+                f"overview-{metric.lower()}-trend-view",
+                "All-time trend",
+            )
+            figure = (
+                all_time_metric_figure(monthly, metric, f"Monthly {metric} over time")
+                if trend_view == "All-time trend"
+                else yoy_metric_figure(monthly, metric, f"Monthly {metric} by year")
+            )
+            chart(figure, f"overview-{metric.lower()}-yoy")
         st.divider()
 
-    st.caption("Each line represents a calendar year so the same month can be compared across years. Partial years stop at the last observed month.")
+    st.caption("Use All-time trend for the full monthly trajectory or Year-on-year to align calendar months across years. All y-axes start at zero.")
 
     st.subheader("Pareto analysis")
     metric = _centered_pills("Pareto measure", ("Orders", "GMV", "AOV"), "overview-contribution-measure", "Orders")
