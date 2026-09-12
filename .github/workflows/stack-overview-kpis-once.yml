@@ -1,0 +1,51 @@
+name: Stack overview KPIs once
+
+on:
+  push:
+    branches:
+      - ui/overview-kpis-stacked
+
+permissions:
+  contents: write
+
+jobs:
+  patch-dashboard:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ui/overview-kpis-stacked
+          fetch-depth: 0
+
+      - name: Apply overview KPI layout
+        run: python scripts/stack_overview_kpis.py
+
+      - name: Validate
+        run: |
+          python -m py_compile deployment/streamlit/app.py
+          python - <<'PY'
+          from pathlib import Path
+          text = Path('deployment/streamlit/app.py').read_text(encoding='utf-8')
+          checks = {
+              'three KPI columns': 'kpi_cols = st.columns(3)' in text,
+              'old split layout removed': 'kpi_col, chart_col = st.columns([1, 2])' not in text,
+              'orders toggle retained': 'overview-{metric.lower()}-trend-view' in text,
+          }
+          failed = [name for name, passed in checks.items() if not passed]
+          if failed:
+              raise SystemExit(f'Overview KPI layout validation failed: {failed}')
+          print('Overview KPI layout validation passed')
+          PY
+
+      - name: Commit dashboard change
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add deployment/streamlit/app.py
+          if git diff --cached --quiet; then
+            echo 'No changes to commit'
+            exit 0
+          fi
+          git commit -m "Stack overview KPIs above charts"
+          git push
