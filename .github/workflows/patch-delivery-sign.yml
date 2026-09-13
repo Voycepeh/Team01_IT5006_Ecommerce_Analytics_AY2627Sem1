@@ -1,0 +1,55 @@
+name: Patch delivery timing sign convention
+
+on:
+  push:
+    paths:
+      - .github/workflows/patch-delivery-sign.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch Streamlit delivery timing semantics
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('deployment/streamlit/app.py')
+          text = path.read_text(encoding='utf-8')
+
+          replacements = {
+              'GREY = "#64748B"\n': 'GREY = "#64748B"\nYELLOW = "#EAB308"\n',
+              '''DELIVERY_TIMING_ORDER = [\n    "30+ early",\n    "15–30 early",\n    "7–15 early",\n    "3–7 early",\n    "1–3 early",\n    "On time",\n    "1–3 late",\n    "3–7 late",\n    "7–15 late",\n    "15–30 late",\n    "30+ late",\n]\n''': '''DELIVERY_TIMING_ORDER = [\n    "30+ late",\n    "15–30 late",\n    "7–15 late",\n    "3–7 late",\n    "1–3 late",\n    "On time",\n    "1–3 early",\n    "3–7 early",\n    "7–15 early",\n    "15–30 early",\n    "30+ early",\n]\n''',
+              '''def delivery_timing_band(days_late):\n    """Classify delivery timing with an explicit on-time bucket."""\n    if pd.isna(days_late):\n        return pd.NA\n    value = float(days_late)\n    if value <= -30:\n        return "30+ early"\n    if value <= -15:\n        return "15–30 early"\n    if value <= -7:\n        return "7–15 early"\n    if value <= -3:\n        return "3–7 early"\n    if value < 0:\n        return "1–3 early"\n    if value == 0:\n        return "On time"\n    if value <= 3:\n        return "1–3 late"\n    if value <= 7:\n        return "3–7 late"\n    if value <= 15:\n        return "7–15 late"\n    if value <= 30:\n        return "15–30 late"\n    return "30+ late"\n''': '''def delivery_timing_band(days_from_promise):\n    """Classify timing where negative is late, zero on time, and positive is early."""\n    if pd.isna(days_from_promise):\n        return pd.NA\n    value = float(days_from_promise)\n    if value <= -30:\n        return "30+ late"\n    if value <= -15:\n        return "15–30 late"\n    if value <= -7:\n        return "7–15 late"\n    if value <= -3:\n        return "3–7 late"\n    if value < 0:\n        return "1–3 late"\n    if value == 0:\n        return "On time"\n    if value <= 3:\n        return "1–3 early"\n    if value <= 7:\n        return "3–7 early"\n    if value <= 15:\n        return "7–15 early"\n    if value <= 30:\n        return "15–30 early"\n    return "30+ early"\n''',
+              '''def delivery_timing_distribution_figure(valid: pd.DataFrame) -> go.Figure:\n    """Show the full distribution of delivery timing around the promised date."""\n    distribution = valid["days_from_promise"].dropna().astype(float)\n    fig = go.Figure(go.Histogram(\n        x=distribution,\n        nbinsx=min(max(int(distribution.nunique()), 20), 120),\n        marker_color=BLUE,\n        opacity=0.9,\n        hovertemplate="Days from promise: %{x}<br>Orders: %{y:,.0f}<extra></extra>",\n        showlegend=False,\n    ))\n    median_gap = float(distribution.median())\n    lower = float(distribution.quantile(0.005))\n    upper = float(distribution.quantile(0.995))\n    if lower == upper:\n        lower -= 1.0\n        upper += 1.0\n    padding = max((upper - lower) * 0.08, 5.0)\n    fig.add_vline(x=0, line_color=ORANGE, line_width=2)\n    fig.add_vline(x=median_gap, line_color=GREEN, line_width=2, line_dash="dash")\n    fig.update_layout(\n        title="How far deliveries land from the promised date",\n        xaxis={\n            "title": "Days from promised date (negative = early, 0 = on time, positive = late)",\n            "range": [lower - padding, upper + padding],\n        },\n        yaxis={"title": "Orders", "tickformat": ",", "rangemode": "tozero"},\n        bargap=0.02,\n    )\n    return styled(fig, 470)\n''': '''def delivery_timing_distribution_figure(valid: pd.DataFrame) -> go.Figure:\n    """Show the full distribution with negative late, zero on time, positive early."""\n    distribution = valid["days_from_promise"].dropna().astype(float)\n    counts = distribution.round().astype(int).value_counts().sort_index()\n    outcomes = ["Late" if day < 0 else "On time" if day == 0 else "Early" for day in counts.index]\n    colors = [RED if day < 0 else YELLOW if day == 0 else GREEN for day in counts.index]\n    fig = go.Figure(go.Bar(\n        x=counts.index,\n        y=counts.values,\n        marker_color=colors,\n        customdata=outcomes,\n        hovertemplate="%{customdata}<br>Days from promised date: %{x}<br>Orders: %{y:,.0f}<extra></extra>",\n        showlegend=False,\n    ))\n    median_gap = float(distribution.median())\n    lower = float(distribution.min())\n    upper = float(distribution.max())\n    if lower == upper:\n        lower -= 1.0\n        upper += 1.0\n    padding = max((upper - lower) * 0.03, 3.0)\n    median_color = RED if median_gap < 0 else YELLOW if median_gap == 0 else GREEN\n    fig.add_vline(x=0, line_color=YELLOW, line_width=3)\n    fig.add_vline(x=median_gap, line_color=median_color, line_width=2, line_dash="dash")\n    fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker={"size": 10, "color": RED}, name="Late (< 0)"))\n    fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker={"size": 10, "color": YELLOW}, name="On time (0)"))\n    fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker={"size": 10, "color": GREEN}, name="Early (> 0)"))\n    fig.update_layout(\n        title="How far deliveries land from the promised date",\n        xaxis={\n            "title": "Days from promised date (negative = late, 0 = on time, positive = early)",\n            "range": [lower - padding, upper + padding],\n        },\n        yaxis={"title": "Orders", "tickformat": ",", "rangemode": "tozero"},\n        bargap=0.02,\n        legend={"orientation": "h", "y": 1.14, "x": 0.5, "xanchor": "center"},\n    )\n    return styled(fig, 470)\n''',
+              'stage_frame["Delivery outcome"] = stage_frame["days_from_promise"].astype(float).le(0).map(\n        {True: "On time or early", False: "Late"}\n    )': 'stage_frame["Delivery outcome"] = stage_frame["days_from_promise"].astype(float).ge(0).map(\n        {True: "On time or early", False: "Late"}\n    )',
+              'valid["days_from_promise"] = valid["days_late"].astype(float)': 'valid["days_from_promise"] = -valid["days_late"].astype(float)',
+              "f\"Median actual delivery is {median_actual:,.0f} days versus {median_quote:,.0f} promised days, and the median order arrived {abs(median_gap):,.0f} days {'late' if median_gap > 0 else 'early'}.\"": "f\"Median actual delivery is {median_actual:,.0f} days versus {median_quote:,.0f} promised days, and the median order arrived {abs(median_gap):,.0f} days {'late' if median_gap < 0 else 'on time' if median_gap == 0 else 'early'}.\"",
+              'cols[2].metric("Median vs promise", f"{number(abs(median_gap), 0)}d {\'late\' if median_gap > 0 else \'early\'}", help="Difference between actual and promised delivery timing, summarised by the median order.")': 'cols[2].metric("Median vs promise", f"{number(abs(median_gap), 0)}d {\'late\' if median_gap < 0 else \'on time\' if median_gap == 0 else \'early\'}", help="Difference between actual and promised delivery timing, summarised by the median order.")',
+              'x=on_time["Delivery timing"], y=on_time["Orders"], name="On time", marker_color=BLUE,': 'x=on_time["Delivery timing"], y=on_time["Orders"], name="On time", marker_color=YELLOW,',
+              'st.caption("Green bars are early deliveries, blue is exactly on the promised date (0 days), and red bars are late deliveries; bar height shows the number of orders in each timing band.")': 'st.caption("Red bars are late deliveries, yellow is exactly on the promised date (0 days), and green bars are early deliveries; bar height shows the number of orders in each timing band.")',
+              'st.caption("This histogram shows the full spread of delivery timing around the promised date. The orange reference line marks the promised date itself (0 days) and the green dashed line marks the median delivered order.")': 'st.caption("Negative values are late (red), 0 is exactly on time (yellow), and positive values are early (green). The dashed line marks the median delivered order.")',
+              'reviewed["Delivery timing"] = reviewed["days_late"].map(delivery_timing_band)': 'reviewed["days_from_promise"] = -reviewed["days_late"].astype(float)\n    reviewed["Delivery timing"] = reviewed["days_from_promise"].map(delivery_timing_band)',
+              'Both charts use the same 30+ days early to 30+ days late timing bands, with an explicit On time (0 days) category.': 'Both charts use the same 30+ days late to 30+ days early timing bands, with negative = late, 0 = on time, and positive = early.'
+          }
+
+          for old, new in replacements.items():
+              if old not in text:
+                  raise SystemExit(f'Expected block not found:\n{old[:200]}')
+              text = text.replace(old, new, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+      - name: Validate Python syntax
+        run: python -m py_compile deployment/streamlit/app.py
+      - name: Commit dashboard fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add deployment/streamlit/app.py
+          git commit -m "Fix delivery timing sign convention and colors"
+          git push
