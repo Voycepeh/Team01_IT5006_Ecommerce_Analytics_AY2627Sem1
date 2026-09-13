@@ -18,20 +18,21 @@ ORANGE = "#F97316"
 GREEN = "#0F766E"
 RED = "#DC2626"
 GREY = "#64748B"
+YELLOW = "#EAB308"
 YEAR_COLORS = [BLUE, ORANGE, GREEN, GREY, RED]
 MONTH_ORDER = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 DELIVERY_TIMING_ORDER = [
-    "30+ early",
-    "15–30 early",
-    "7–15 early",
-    "3–7 early",
-    "1–3 early",
-    "On time",
-    "1–3 late",
-    "3–7 late",
-    "7–15 late",
-    "15–30 late",
     "30+ late",
+    "15–30 late",
+    "7–15 late",
+    "3–7 late",
+    "1–3 late",
+    "On time",
+    "1–3 early",
+    "3–7 early",
+    "7–15 early",
+    "15–30 early",
+    "30+ early",
 ]
 
 BRAZIL_REGION = {
@@ -201,32 +202,32 @@ def delivered_orders(frame: pd.DataFrame) -> pd.DataFrame:
     return frame[frame["is_delivered_complete"] & frame["delivery_days"].notna() & frame["estimated_delivery_days"].notna() & frame["days_late"].notna() & frame["is_late"].notna()].copy()
 
 
-def delivery_timing_band(days_late):
-    """Classify delivery timing with an explicit on-time bucket."""
-    if pd.isna(days_late):
+def delivery_timing_band(days_from_promise):
+    """Classify timing where negative is late, zero on time, and positive is early."""
+    if pd.isna(days_from_promise):
         return pd.NA
-    value = float(days_late)
+    value = float(days_from_promise)
     if value <= -30:
-        return "30+ early"
+        return "30+ late"
     if value <= -15:
-        return "15–30 early"
+        return "15–30 late"
     if value <= -7:
-        return "7–15 early"
+        return "7–15 late"
     if value <= -3:
-        return "3–7 early"
+        return "3–7 late"
     if value < 0:
-        return "1–3 early"
+        return "1–3 late"
     if value == 0:
         return "On time"
     if value <= 3:
-        return "1–3 late"
+        return "1–3 early"
     if value <= 7:
-        return "3–7 late"
+        return "3–7 early"
     if value <= 15:
-        return "7–15 late"
+        return "7–15 early"
     if value <= 30:
-        return "15–30 late"
-    return "30+ late"
+        return "15–30 early"
+    return "30+ early"
 
 
 def page_insight(text: str) -> None:
@@ -434,33 +435,41 @@ def business_overview(frame: pd.DataFrame) -> None:
 
 
 def delivery_timing_distribution_figure(valid: pd.DataFrame) -> go.Figure:
-    """Show the full distribution of delivery timing around the promised date."""
+    """Show the full distribution with negative late, zero on time, positive early."""
     distribution = valid["days_from_promise"].dropna().astype(float)
-    fig = go.Figure(go.Histogram(
-        x=distribution,
-        nbinsx=min(max(int(distribution.nunique()), 20), 120),
-        marker_color=BLUE,
-        opacity=0.9,
-        hovertemplate="Days from promise: %{x}<br>Orders: %{y:,.0f}<extra></extra>",
+    counts = distribution.round().astype(int).value_counts().sort_index()
+    outcomes = ["Late" if day < 0 else "On time" if day == 0 else "Early" for day in counts.index]
+    colors = [RED if day < 0 else YELLOW if day == 0 else GREEN for day in counts.index]
+    fig = go.Figure(go.Bar(
+        x=counts.index,
+        y=counts.values,
+        marker_color=colors,
+        customdata=outcomes,
+        hovertemplate="%{customdata}<br>Days from promised date: %{x}<br>Orders: %{y:,.0f}<extra></extra>",
         showlegend=False,
     ))
     median_gap = float(distribution.median())
-    lower = float(distribution.quantile(0.005))
-    upper = float(distribution.quantile(0.995))
+    lower = float(distribution.min())
+    upper = float(distribution.max())
     if lower == upper:
         lower -= 1.0
         upper += 1.0
-    padding = max((upper - lower) * 0.08, 5.0)
-    fig.add_vline(x=0, line_color=ORANGE, line_width=2)
-    fig.add_vline(x=median_gap, line_color=GREEN, line_width=2, line_dash="dash")
+    padding = max((upper - lower) * 0.03, 3.0)
+    median_color = RED if median_gap < 0 else YELLOW if median_gap == 0 else GREEN
+    fig.add_vline(x=0, line_color=YELLOW, line_width=3)
+    fig.add_vline(x=median_gap, line_color=median_color, line_width=2, line_dash="dash")
+    fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker={"size": 10, "color": RED}, name="Late (< 0)"))
+    fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker={"size": 10, "color": YELLOW}, name="On time (0)"))
+    fig.add_trace(go.Scatter(x=[None], y=[None], mode="markers", marker={"size": 10, "color": GREEN}, name="Early (> 0)"))
     fig.update_layout(
         title="How far deliveries land from the promised date",
         xaxis={
-            "title": "Days from promised date (negative = early, 0 = on time, positive = late)",
+            "title": "Days from promised date (negative = late, 0 = on time, positive = early)",
             "range": [lower - padding, upper + padding],
         },
         yaxis={"title": "Orders", "tickformat": ",", "rangemode": "tozero"},
         bargap=0.02,
+        legend={"orientation": "h", "y": 1.14, "x": 0.5, "xanchor": "center"},
     )
     return styled(fig, 470)
 
@@ -503,7 +512,7 @@ def delivery_stage_breakdown_figure(valid: pd.DataFrame) -> go.Figure:
     if stage_frame.empty:
         return go.Figure()
 
-    stage_frame["Delivery outcome"] = stage_frame["days_from_promise"].astype(float).le(0).map(
+    stage_frame["Delivery outcome"] = stage_frame["days_from_promise"].astype(float).ge(0).map(
         {True: "On time or early", False: "Late"}
     )
     summary = stage_frame.groupby("Delivery outcome", as_index=False).agg(
@@ -575,18 +584,18 @@ def delivery_promise(frame: pd.DataFrame) -> None:
         st.info("No delivered orders with valid quote and delivery timestamps match the filters.")
         return
 
-    valid["days_from_promise"] = valid["days_late"].astype(float)
+    valid["days_from_promise"] = -valid["days_late"].astype(float)
     median_actual = valid["delivery_days"].median()
     median_quote = valid["estimated_delivery_days"].median()
     median_gap = valid["days_from_promise"].median()
     quote_mae = valid["days_from_promise"].abs().mean()
     page_insight(
-        f"Median actual delivery is {median_actual:,.0f} days versus {median_quote:,.0f} promised days, and the median order arrived {abs(median_gap):,.0f} days {'late' if median_gap > 0 else 'early'}."
+        f"Median actual delivery is {median_actual:,.0f} days versus {median_quote:,.0f} promised days, and the median order arrived {abs(median_gap):,.0f} days {'late' if median_gap < 0 else 'on time' if median_gap == 0 else 'early'}."
     )
     cols = st.columns(4)
     cols[0].metric("Median actual delivery", f"{number(median_actual, 0)} days")
     cols[1].metric("Median promised delivery", f"{number(median_quote, 0)} days")
-    cols[2].metric("Median vs promise", f"{number(abs(median_gap), 0)}d {'late' if median_gap > 0 else 'early'}", help="Difference between actual and promised delivery timing, summarised by the median order.")
+    cols[2].metric("Median vs promise", f"{number(abs(median_gap), 0)}d {'late' if median_gap < 0 else 'on time' if median_gap == 0 else 'early'}", help="Difference between actual and promised delivery timing, summarised by the median order.")
     cols[3].metric("Promise MAE", f"{number(quote_mae, 1)} days", help="MAE = Mean Absolute Error. It is the average absolute gap between actual and promised delivery timing; lower means the promise is closer to reality.")
 
     left, right = st.columns(2)
@@ -637,7 +646,7 @@ def delivery_promise(frame: pd.DataFrame) -> None:
             customdata=early[["Orders"]], hovertemplate="%{x}<br>Orders: %{y:,.0f}<extra></extra>",
         ))
         fig.add_trace(go.Bar(
-            x=on_time["Delivery timing"], y=on_time["Orders"], name="On time", marker_color=BLUE,
+            x=on_time["Delivery timing"], y=on_time["Orders"], name="On time", marker_color=YELLOW,
             text=on_time["Orders"], texttemplate="%{text:,.0f}", textposition="outside", textfont={"size": 10}, cliponaxis=False,
             customdata=on_time[["Orders"]], hovertemplate="%{x}<br>Orders: %{y:,.0f}<extra></extra>",
         ))
@@ -654,12 +663,12 @@ def delivery_promise(frame: pd.DataFrame) -> None:
             legend={"orientation": "h", "y": 1.14, "x": 0},
         )
         chart(styled(fig, 470), "promise-timing-counts")
-        st.caption("Green bars are early deliveries, blue is exactly on the promised date (0 days), and red bars are late deliveries; bar height shows the number of orders in each timing band.")
+        st.caption("Red bars are late deliveries, yellow is exactly on the promised date (0 days), and green bars are early deliveries; bar height shows the number of orders in each timing band.")
 
     detail_left, detail_right = st.columns(2)
     with detail_left:
         chart(delivery_timing_distribution_figure(valid), "promise-timing-distribution")
-        st.caption("This histogram shows the full spread of delivery timing around the promised date. The orange reference line marks the promised date itself (0 days) and the green dashed line marks the median delivered order.")
+        st.caption("Negative values are late (red), 0 is exactly on time (yellow), and positive values are early (green). The dashed line marks the median delivered order.")
 
     with detail_right:
         stage_figure = delivery_stage_breakdown_figure(valid)
@@ -680,7 +689,8 @@ def delivery_experience(frame: pd.DataFrame) -> None:
     if reviewed.empty:
         st.info("No reviewed orders with valid delivery outcomes match the filters.")
         return
-    reviewed["Delivery timing"] = reviewed["days_late"].map(delivery_timing_band)
+    reviewed["days_from_promise"] = -reviewed["days_late"].astype(float)
+    reviewed["Delivery timing"] = reviewed["days_from_promise"].map(delivery_timing_band)
     reviewed["Delivery timing"] = pd.Categorical(reviewed["Delivery timing"], categories=DELIVERY_TIMING_ORDER, ordered=True)
     timing = reviewed.dropna(subset=["Delivery timing"]).groupby("Delivery timing", observed=False, as_index=False).agg(**{"Average review score": ("review_score", "mean"), "Negative review rate": ("is_negative_review", "mean"), "Reviewed orders": ("order_id", "nunique")})
     timing["Delivery timing"] = pd.Categorical(timing["Delivery timing"].astype(str), categories=DELIVERY_TIMING_ORDER, ordered=True)
@@ -719,7 +729,7 @@ def delivery_experience(frame: pd.DataFrame) -> None:
         fig.update_xaxes(title="Delivery timing relative to promise", tickangle=-35)
         chart(styled(fig, 470), "experience-negative-review-rate")
 
-    st.caption("Both charts use the same 30+ days early to 30+ days late timing bands, with an explicit On time (0 days) category. Negative review means review score 1 or 2. Colour has the same meaning in both: green = better customer outcome, red = worse customer outcome.")
+    st.caption("Both charts use the same 30+ days late to 30+ days early timing bands, with negative = late, 0 = on time, and positive = early. Negative review means review score 1 or 2. Colour has the same meaning in both: green = better customer outcome, red = worse customer outcome.")
 
     st.divider()
     st.subheader("Review score correlations")
