@@ -20,7 +20,7 @@ flowchart TD
     B --> C{80/20 train-test split}
 
     C -->|80% training data| D[Preprocessing Pipeline]
-    D --> E[Baseline + Logistic Regression]
+    D --> E[Logistic Regression]
     E --> F[5-fold Cross-Validation]
     F --> G[Fit Final Logistic Regression]
 
