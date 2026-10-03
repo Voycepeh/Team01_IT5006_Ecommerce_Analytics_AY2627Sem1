@@ -52,7 +52,7 @@ The notebook is intended to run from top to bottom:
 8. Generate out-of-fold probabilities from the selected variant and select the threshold that maximises training-only OOF F1.
 9. Fit the selected pipeline on all training rows and evaluate it once on the protected test set.
 10. Inspect coefficients, odds ratios and protected-test errors.
-11. Save the fitted pipeline and selected threshold as `deployment/negative_review_logistic.joblib`, then reload it for an inference smoke test.
+11. Save the fitted pipeline and selected threshold as `deployment/negative_review_logistic_pipeline.pkl`, then reload it for an inference smoke test.
 
 The notebook produces the evidence. Conclusions about whether the resulting model is useful should be written only after reviewing the actual run outputs.
 
@@ -143,12 +143,12 @@ The notebook reloads that artifact and scores one held-out-shaped row using `pre
 
 ## Deployment Flow
 
-Phase 2 separates **training** from **serving predictions**. The notebook is responsible for fitting and validating the model. The deployment layer should load the frozen artifact rather than retraining the model whenever a prediction is requested.
+Following the lecturer's three-part architecture, the project separates **Part 1: Training**, **Part 2: FastAPI**, and **Part 3: Streamlit**. Phase 2 separates **training** from **serving predictions**. The notebook is responsible for fitting and validating the model. The deployment layer should load the frozen artifact rather than retraining the model whenever a prediction is requested.
 
 ```mermaid
 flowchart LR
     A[Phase 2 notebook] --> B[Train + evaluate]
-    B --> C[(negative_review_logistic.joblib)]
+    B --> C[(negative_review_logistic_pipeline.pkl)]
     C --> D[Phase 3 FastAPI service]
     D --> E[POST /predict]
     E --> F[Validate incoming order features]
@@ -160,14 +160,14 @@ flowchart LR
 
 ### What crosses the Phase 2 → Phase 3 boundary
 
-The deployment artifact is `deployment/negative_review_logistic.joblib`. It packages the fitted preprocessing and Logistic Regression pipeline together with the selected probability threshold, expected feature contract, prediction point and supporting metadata.
+The deployment artifact is `deployment/negative_review_logistic_pipeline.pkl`. Following the lecturer's convention, it uses a `.pkl` model file and keeps **Preprocessor + Model in ONE pipeline file**. It packages the fitted preprocessing and Logistic Regression pipeline together with the selected probability threshold, expected feature contract, prediction point and supporting metadata.
 
 This is important because Phase 3 should not recreate preprocessing independently. A request should be transformed using the **same fitted imputation, scaling and one-hot encoding** learned during Phase 2 before Logistic Regression calculates the negative-review probability.
 
 The current GitHub Actions workflow executes the canonical notebook and preserves both:
 
 * the executed notebook, which contains the modelling evidence and outputs;
-* `negative_review_logistic.joblib`, which is the deployable model artifact.
+* `negative_review_logistic_pipeline.pkl`, which is the deployable model artifact.
 
 These are uploaded as CI artifacts rather than committing the generated binary model into Git history.
 
@@ -175,7 +175,7 @@ These are uploaded as CI artifacts rather than committing the generated binary m
 
 The planned FastAPI layer should be intentionally thin:
 
-1. start the API and load the approved `.joblib` artifact;
+1. start the API and load the approved `.pkl` artifact;
 2. accept the required order features at a prediction endpoint such as `POST /predict`;
 3. validate the request against the model's feature contract;
 4. call the saved inference pipeline to obtain the negative-review probability;
