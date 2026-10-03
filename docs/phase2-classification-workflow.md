@@ -141,6 +141,51 @@ The protected-test rows are labelled as correct, false negative or false positiv
 
 The notebook reloads that artifact and scores one held-out-shaped row using `predict_from_artifact()`. This checks the inference interface; it is not another model-quality test.
 
+## Deployment Flow
+
+Phase 2 separates **training** from **serving predictions**. The notebook is responsible for fitting and validating the model. The deployment layer should load the frozen artifact rather than retraining the model whenever a prediction is requested.
+
+```mermaid
+flowchart LR
+    A[Phase 2 notebook] --> B[Train + evaluate]
+    B --> C[(negative_review_logistic.joblib)]
+    C --> D[Phase 3 FastAPI service]
+    D --> E[POST /predict]
+    E --> F[Validate incoming order features]
+    F --> G[Saved preprocessing pipeline]
+    G --> H[Logistic Regression probability]
+    H --> I[Apply saved threshold]
+    I --> J[Prediction response]
+```
+
+### What crosses the Phase 2 → Phase 3 boundary
+
+The deployment artifact is `deployment/negative_review_logistic.joblib`. It packages the fitted preprocessing and Logistic Regression pipeline together with the selected probability threshold, expected feature contract, prediction point and supporting metadata.
+
+This is important because Phase 3 should not recreate preprocessing independently. A request should be transformed using the **same fitted imputation, scaling and one-hot encoding** learned during Phase 2 before Logistic Regression calculates the negative-review probability.
+
+The current GitHub Actions workflow executes the canonical notebook and preserves both:
+
+* the executed notebook, which contains the modelling evidence and outputs;
+* `negative_review_logistic.joblib`, which is the deployable model artifact.
+
+These are uploaded as CI artifacts rather than committing the generated binary model into Git history.
+
+### Phase 3 serving responsibility
+
+The planned FastAPI layer should be intentionally thin:
+
+1. start the API and load the approved `.joblib` artifact;
+2. accept the required order features at a prediction endpoint such as `POST /predict`;
+3. validate the request against the model's feature contract;
+4. call the saved inference pipeline to obtain the negative-review probability;
+5. apply the saved Phase 2 threshold;
+6. return the probability and predicted class.
+
+FastAPI therefore **serves** the trained model; it does not train, select or tune it. Model development remains in Phase 2, while Phase 3 consumes the frozen artifact for inference.
+
+The exact Phase 3 API schema and application behaviour should be finalised against the course's Phase 3 requirements before implementation. This page documents the handoff already supported by the Phase 2 artifact, not an API that has already been built.
+
 ## Feature Contract
 
 The exact current feature lists in `src/classification_data.py` are authoritative.
