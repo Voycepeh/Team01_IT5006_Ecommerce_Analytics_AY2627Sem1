@@ -1,183 +1,166 @@
-# Phase 2 classification workflow
+# Phase 2 — Negative Review Classification
+
+This page explains the modelling workflow implemented by the canonical Phase 2 notebook and its supporting `src/classification_*.py` modules.
 
 ## Big Picture
 
-**Research question:** Among orders delivered late, can we predict which are likely to
-receive a negative customer review (1 or 2 stars)?
+**Question:** Among orders that were delivered late, which are likely to receive a negative review (1–2 stars)?
 
-**Class being predicted: Negative review**
+**Prediction point:** Immediately after a late delivery is completed and before the customer's review is known.
 
-- `1` = review score 1–2
-- `0` = review score 3–5
+**Target:** `1` = review score 1–2; `0` = review score 3–5.
 
-**Population being studied:** Orders that were delivered late and subsequently received a
-review.
-
-**Key explanatory feature:** How late the delivery was. Phase 1 records this using
-`days_early`, where negative values represent late deliveries. For example, `-1` means 1 day
-late and `-10` means 10 days late.
-
-**Why this matters:** Not every late delivery receives a negative review. The model
-investigates whether the severity of lateness, together with other eligible order
-characteristics, can distinguish late deliveries that are more likely to receive a negative
-review.
-
-Late delivery is therefore the population filter, not the class being predicted. Once a late
-order arrives, the customer-experience team can use the estimated negative-review risk to
-prioritise recovery or outreach. The prediction point is immediately after the late delivery
-is completed and before the review is known. Delivery performance can therefore be used, but
-nothing from the review except its score may enter target construction.
-
-The first model family is Logistic Regression. It is suitable as a transparent course-level
-baseline, supports probability estimates and allows coefficient/odds-ratio interpretation.
-This foundation does not report a fitted result or select a final threshold: those are team
-analytical decisions that must be produced by running and reviewing the canonical notebook.
-No second classification model family is introduced here.
-
-Phase 1 already provides cleaned analytical CSVs at order and item grain. Phase 2 adds a
-classification-only model table, a leakage-safe sklearn pipeline, evaluation/threshold
-helpers, and a versioned inference bundle contract. It does **not** rebuild general Phase 1
-cleaning, consume `dashboard_orders.parquet`, or implement the Phase 3 application.
+The implementation deliberately separates **model development** from the **protected final test**. Model configuration and the operating threshold are chosen using training data only. The untouched test set is evaluated once after those decisions are frozen.
 
 ```mermaid
 flowchart TD
-    P1[Phase 1 processed data] --> BUILD[Build late-delivery<br/>classification dataset]
-    BUILD --> SPLIT{Protected stratified<br/>train / test split}
+    A([Phase 1 processed data]) --> B[Build late-delivery modelling dataset]
+    B --> C[Feature and leakage checks]
+    C --> D{Protected stratified split}
 
-    SPLIT -->|Training data only| MODELS[Dummy baseline +<br/>Logistic Regression]
-    MODELS --> CV[Stratified cross-validation<br/>and OOF probabilities]
-    CV --> DECIDE[Model and threshold decision]
+    D -->|80% training| E[5-fold cross-validation]
+    E --> F[Dummy baseline]
+    E --> G[Logistic Regression]
+    E --> H[Balanced Logistic Regression]
+    G --> I[Select Logistic variant by mean CV F1]
+    H --> I
+    F -.->|reference baseline| I
+    I --> J[OOF probabilities on training data]
+    J --> K[Select threshold by OOF F1]
 
-    SPLIT -->|Hold untouched| TEST[(Protected test set)]
-    TEST -.->|Open only after decision| FINAL[Final evaluation]
-    DECIDE --> FINAL
-
-    FINAL --> INTERPRET[Interpretation and conclusion]
-    INTERPRET --> SAVE[Save pipeline + threshold<br/>for Phase 3]
+    D -->|20% untouched test| L[(Protected test set)]
+    K --> M[Fit selected pipeline on all training rows]
+    M --> N[Evaluate once on protected test]
+    L --> N
+    N --> O[Interpret coefficients and errors]
+    O --> P([Save pipeline + threshold for Phase 3])
 ```
 
-## Inputs and Outputs
+The value of this design is not simply that Logistic Regression is fitted. It creates a reproducible chain from a clearly defined prediction problem to a model whose selection, threshold and final evaluation are kept separate.
 
-| Component | Receives | Returns / persists |
-| --- | --- | --- |
-| `build_classification_dataset` | Phase 1 `order_level.csv` (one row/order) and `item_level.csv` (one row/order item) | One row per late, delivered, reviewed order; trace-only `order_id`, explicit model features, binary target |
-| `split_features_target` | Contracted classification dataset | `X` containing only the allow-listed features and binary `y` |
-| `build_preprocessor` | Numeric and categorical columns named in `classification_data.py` | Unfitted `ColumnTransformer`; median imputation/scaling and mode imputation/OHE are learned only during fitting |
-| `build_logistic_pipeline` | Contracted feature frame at `.fit()` | Unfitted end-to-end Logistic Regression pipeline |
-| Evaluation helpers | True labels and probabilities from validation/OOF folds | Metric dictionary, threshold comparison table, or optional statistical candidate; no automatic operating decision |
-| `save_inference_artifact` | Reviewed fitted pipeline, training-only selected threshold and optional provenance | Joblib dictionary with schema version, exact feature contract, prediction point and metadata |
-| `predict_from_artifact` | Loaded artifact and one or more model-feature rows | Negative-review probability and thresholded prediction |
+## What the Notebook Actually Runs
 
-The authoritative detailed dataset contract is the `build_classification_dataset()`
-docstring. The inference artifact should only be produced after the team has frozen the
-model, threshold and provenance metadata (for example, data version, commit and metrics).
-Model binaries are generated outputs and are not added by this foundation PR.
+The notebook is intended to run from top to bottom:
+
+1. Load `data/processed/order_level.csv` and `item_level.csv`.
+2. Build one modelling row per eligible late, delivered, reviewed order.
+3. Audit the target, modelling columns and review timing.
+4. Restrict predictors to the explicit feature allow-list.
+5. Create one stratified 80/20 training/test split with a fixed random seed.
+6. Compare a Dummy baseline, standard Logistic Regression and class-weighted Logistic Regression using the same five stratified folds.
+7. Select between the two Logistic Regression variants using mean cross-validated F1.
+8. Generate out-of-fold probabilities from the selected variant and select the threshold that maximises training-only OOF F1.
+9. Fit the selected pipeline on all training rows and evaluate it once on the protected test set.
+10. Inspect coefficients, odds ratios and protected-test errors.
+11. Save the fitted pipeline and selected threshold as `deployment/negative_review_logistic.joblib`, then reload it for an inference smoke test.
+
+The notebook produces the evidence. Conclusions about whether the resulting model is useful should be written only after reviewing the actual run outputs.
 
 ## Under the Hood
 
-### Eligibility, grain and target
+### 1. Build the modelling population
 
-- Eligible examples are delivered orders with a non-null customer-delivery timestamp,
-  Phase 1 `late_delivery_flag == 1` and a deduplicated review score. This is the
-  retrospective population needed to construct the target; review-answer timing does not
-  silently remove otherwise usable observations.
-- Phase 1 defines `days_early = estimated delivery date - actual delivery date`: positive
-  means early, zero means on the promised day and negative means late. The builder validates
-  that `late_delivery_flag` agrees with this convention and carries `days_early` through
-  unchanged as the initial lateness-severity candidate.
-- Lateness bands are not separate targets or separate models. The target remains negative
-  review yes/no, while lateness severity is one input to the same Logistic Regression.
-- `review_timing_audit()` separately counts missing, unparseable, at/before-delivery and
-  after-delivery review answers. These outcome-side fields support data-quality discussion
-  only and are never predictors.
-- `order_id` must be unique in the order input; (`order_id`, `order_item_id`) must be unique
-  in the item input; every eligible order must have item coverage.
-- Review score must be one of 1–5. Scores 1–2 map to target 1; scores 3–5 map to target 0.
-- Both target classes must be present. Required columns, duplicate keys and infinite numeric
-  values fail early rather than silently changing the modelling population.
+`build_classification_dataset()` reuses the Phase 1 analytical tables rather than rebuilding general data cleaning. Eligible rows must be delivered, have a customer-delivery timestamp, have `late_delivery_flag == 1`, and have a review score.
 
-### Features and leakage controls
+Phase 1's sign convention is retained: positive `days_early` means early, zero means on time and negative means late. The builder checks that `late_delivery_flag` agrees with that convention.
 
-Features are allow-listed as `NUMERIC_FEATURES` and `CATEGORICAL_FEATURES`; the code never
-uses “all columns except target.” IDs and post-review fields cannot silently enter the model
-when an upstream CSV gains a column. Order-level payment, geography, temporal, value and
-delivery features are combined with deterministic item-derived product summaries. A
-multi-category order uses the category with greatest item value, with alphabetical tie-break.
+The target is retrospective: review scores 1–2 become `is_negative_review = 1`; scores 3–5 become `0`.
 
-Deterministic business transformations occur before splitting because they learn no sample
-statistics. Median/mode imputation, scaling and one-hot category discovery remain inside the
-sklearn Pipeline, so cross-validation fits them separately in each training fold.
+### 2. Prevent leakage
 
-The test partition must be created once with a fixed seed and target stratification, then
-left untouched until all refinement and threshold choices are complete. Threshold selection
-uses out-of-fold probabilities from training data only. Accuracy is not a sufficient primary
-metric for an imbalanced target; compare precision, recall, F1, balanced accuracy and PR-AUC,
-with ROC-AUC as supporting context. The business cost of missed negative reviews versus
-unnecessary outreach must determine the final selection rule.
+The model does not receive review IDs, review text or review timestamps. IDs used for tracing and joins are also excluded from `X`.
 
-`threshold_table()` is the primary analysis interface. `best_threshold_by_metric()` may
-identify a statistical candidate, such as the maximum-F1 row, but it does not select the
-operating threshold. The team must make and document that decision from stakeholder costs;
-the protected test set cannot participate in it.
+Predictors are explicitly allow-listed in `NUMERIC_FEATURES` and `CATEGORICAL_FEATURES`. This means a new upstream CSV column cannot silently become a model feature.
 
-### Feature contract and audit
+Delivery performance can be used because the defined prediction happens **after delivery is completed**. Changing that prediction point would require a new feature review.
 
-This table covers the actual Phase 1 fields used to construct the **initial candidate feature
-set** and the important exclusions. The team must review this set before modelling. Grouped
-rows share the same treatment and rationale; the exact current allow-list remains
-authoritative in `NUMERIC_FEATURES` and `CATEGORICAL_FEATURES`.
+### 3. Keep learned preprocessing inside the Pipeline
 
-| Feature | Source | Treatment | Available at prediction point? | Model input? | Reason |
-| --- | --- | --- | --- | --- | --- |
-| `review_score` | `order_level` / deduplicated reviews | Target only | No | Target only | Constructs 1 for scores 1–2 and 0 for 3–5; never enters `X` |
-| `review_id`, review comments | `order_level` / reviews | Excluded leakage | No | No | Exist only with the review outcome and could reveal it |
-| `review_creation_date`, `review_answer_timestamp`, `days_to_review_request` | `order_level` / reviews | Excluded leakage | No | No | Outcome-side timing is audit context, not predictive input |
-| `order_id` | `order_level` | Excluded identifier | Yes | No | Retained only to trace errors and joins |
-| `customer_id`, `customer_unique_id`, `product_id`, `seller_id` | processed source tables | Excluded identifier | Yes | No | High-cardinality entity keys risk memorisation and are not deployable signals here |
-| `order_status` | `order_level` | Excluded constant/non-useful | Yes | No | Eligibility fixes the modelling population to delivered orders |
-| `late_delivery_flag` | `order_level` | Cohort filter; excluded constant | Yes | No | Every modelling row is late, so the flag contains no predictive variation |
-| Raw purchase, approval, carrier, delivery and estimate timestamps | `order_level` | Derived then excluded | Varies | No | Human-readable timestamps are transformed into reviewed temporal/duration fields |
-| `delivery_days`, `estimated_delivery_days`, `days_early` | `order_level` | Derived | Yes | Yes | Delivery performance is known; Phase 1 `days_early` stays negative for this late-only cohort |
-| `item_count`, `order_item_value`, `order_freight_value`, `freight_share`, `seller_count` | `order_level` | Derived | Yes | Yes | Order composition/value information is known before delivery |
-| `payment_total`, `payment_count`, `max_installments` | `order_level` | Derived | Yes | Yes | Aggregated payment characteristics are available before delivery |
-| `customer_state`, `seller_state`, `same_state`, `n_seller_states` | `order_level` | Direct/derived | Yes | Yes | Coarse geography and route complexity without entity IDs |
-| `purchase_month`, `purchase_weekday` | `order_level` | Derived | Yes | Yes | Captures temporal/seasonal context without raw timestamps |
-| `primary_product_category` | `item_level` | Derived | Yes | Yes | Highest item-value category with deterministic alphabetical tie-break |
-| Product weight, dimensions and photo count | `item_level` | Derived | Yes | Yes | Aggregated to mean weight, volume and photo count at order grain |
-| Product-name/description lengths | `item_level` | Excluded non-useful | Yes | No | Not selected for the initial, focused Logistic Regression contract |
+Deterministic item aggregation happens before modelling. Learned transformations do not.
 
-### Dummy baseline
+For numeric features, the Pipeline learns median imputation and standardisation. For categorical features, it learns most-frequent imputation and one-hot encoding. Because these transformations live inside the scikit-learn Pipeline, every cross-validation fold learns them from that fold's training rows rather than from the full dataset.
 
-`DummyClassifier(strategy="prior")` is a no-skill reference: it learns the class prior, not
-predictive relationships between features and the target. It retains the same preprocessing
-pipeline for interface consistency and a like-for-like CV call. The fitted transformations
-do **not** make the Dummy classifier feature-informed.
+### 4. Protect the final test set
 
-### Logistic Regression interpretation
+The data is split once using `train_test_split(..., test_size=0.20, stratify=y, random_state=42)`.
 
-After the final fit, the notebook calculates `Odds Ratio = exp(Coefficient)` and
-`% Change in Odds = (Odds Ratio - 1) * 100` for the outcome
-`is_negative_review = 1`. Numeric coefficients represent a one-standard-deviation increase
-because numeric inputs are scaled. The current one-hot encoder uses `drop=None`, so there is
-no omitted categorical reference level; a direct A-versus-B comparison uses
-`exp(coefficient_A - coefficient_B)`. Interpret results as associations, not causes, and let
-the team write business implications only after reviewing the actual fitted evidence.
-If useful after fitting, the team may illustrate predictions at 1, 3, 5 and 10 days late
-(`days_early = -1, -3, -5, -10`) only with a documented, defensible profile for all other
-features. This would be an interpretation illustration, not fabricated daily snapshots.
+Stratification preserves the target-class proportion in both partitions. The 20% test partition is not used for feature decisions, model selection or threshold selection.
 
-## Team collaboration
+### 5. Establish a baseline
 
-The three teammates can divide the late-delivery cohort/feature audit, model development, and
-evaluation/interpretation sections, along with their supporting functions in `src/`. Use
-separate branches where practical, avoid editing the same `.ipynb` simultaneously, and use
-one notebook integrator when changes need to be combined. The team should review the shared
-prediction point, feature set, model evidence and final conclusions together.
+`DummyClassifier(strategy="prior")` provides a no-skill reference. It learns the class prior rather than relationships between predictors and the outcome.
 
-## Remaining analysis
+Its purpose is to show what performance looks like without useful predictive relationships. The Logistic Regression results should therefore be interpreted relative to this baseline rather than in isolation.
 
-- Review the dataset, target balance and initial candidate features.
-- Compare the Dummy baseline and Logistic Regression using stratified cross-validation.
-- Use training-only OOF probabilities to choose and justify an operating threshold.
-- Evaluate once on the protected test set, then interpret coefficients and errors.
-- Save and smoke-test the approved artifact for the Phase 3 handoff.
+### 6. Compare Logistic Regression configurations
+
+The notebook compares:
+
+- standard Logistic Regression;
+- Logistic Regression with `class_weight="balanced"`.
+
+Both use the same five-fold `StratifiedKFold` splits and the same preprocessing contract. The notebook records precision, recall, F1, balanced accuracy, PR-AUC and ROC-AUC for each configuration.
+
+Only the two Logistic Regression variants participate in model selection. The variant with the higher **mean cross-validated F1** is selected. The Dummy model remains a reference baseline.
+
+### 7. Select the operating threshold without touching the test set
+
+The selected Logistic Regression configuration generates out-of-fold probabilities for the training rows using `cross_val_predict(..., method="predict_proba")`.
+
+`threshold_table()` evaluates thresholds from 0.05 to 0.95. The implemented notebook selects the threshold with the highest OOF F1; ties favour the lower threshold.
+
+This means both the model configuration and threshold are determined before the protected test set is opened.
+
+### 8. Evaluate once on unseen data
+
+The selected pipeline is fitted on all training rows and produces probabilities for the untouched test set.
+
+`classification_metrics()` reports precision, recall, F1, balanced accuracy, PR-AUC and ROC-AUC. These are the final protected-test measurements. They are evidence for interpretation, not inputs for another round of tuning.
+
+### 9. Interpret the Logistic Regression
+
+For `is_negative_review = 1`, the notebook calculates:
+
+`Odds Ratio = exp(Coefficient)`
+
+and
+
+`% Change in Odds = (Odds Ratio - 1) × 100`.
+
+An odds ratio above 1 is associated with higher odds of a negative review; below 1 is associated with lower odds. Numeric predictors are standardised, so their coefficients correspond to a one-standard-deviation increase while the other model variables are held fixed.
+
+These are associations, not causal effects.
+
+### 10. Inspect errors
+
+The protected-test rows are labelled as correct, false negative or false positive. This supports discussion of where the model fails without using those errors to retune the protected evaluation.
+
+### 11. Save the Phase 3 artifact
+
+`save_inference_artifact()` stores the fitted Pipeline, selected threshold, model-feature contract, prediction point and metadata in a versioned Joblib bundle.
+
+The notebook reloads that artifact and scores one held-out-shaped row using `predict_from_artifact()`. This checks the inference interface; it is not another model-quality test.
+
+## Feature Contract
+
+The exact current feature lists in `src/classification_data.py` are authoritative.
+
+| Information | Treatment | Why |
+| --- | --- | --- |
+| Review score | Target only | Constructs the retrospective binary outcome |
+| Review ID, comments and timestamps | Excluded | Outcome-side leakage |
+| Order/customer/product/seller IDs | Excluded | Trace/join keys; avoid entity memorisation |
+| `order_status`, `late_delivery_flag` | Cohort filter only | Constant by construction within the modelling population |
+| Delivery durations and `days_early` | Predictor | Delivery performance is known at the prediction point |
+| Item/value/freight/seller counts | Predictor | Order composition and value |
+| Payment totals/count/installments | Predictor | Payment characteristics |
+| Customer/seller geography | Predictor | Coarse geography without entity IDs |
+| Purchase month/weekday | Predictor | Temporal context |
+| Primary product category | Predictor | Deterministic highest-value category |
+| Mean product weight/volume/photo count | Predictor | Order-grain product characteristics |
+
+## Outputs to Review After a Successful Run
+
+A successful notebook execution means the technical classification pipeline has been built end to end. The analysis is academically complete only after the team reviews the generated evidence: target balance, CV comparison against the Dummy baseline, selected Logistic Regression configuration, selected OOF threshold, protected-test metrics, coefficient/odds-ratio interpretation and error patterns.
+
+Poor predictive performance is still a valid result. The protected test should not be used to repeatedly tune the model until a preferred result appears.
