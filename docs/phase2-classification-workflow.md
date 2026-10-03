@@ -171,9 +171,9 @@ The current GitHub Actions workflow executes the canonical notebook and preserve
 
 These are uploaded as CI artifacts rather than committing the generated binary model into Git history.
 
-### Phase 3 deployment handoff
+### Phase 3 FastAPI handoff
 
-If FastAPI is chosen for Phase 3, the deployment layer should be intentionally thin:
+For the current project direction, Phase 3 stops at a thin FastAPI model-serving layer:
 
 1. start the API and load the approved `.pkl` artifact;
 2. accept the required order features at a prediction endpoint such as `POST /predict`;
@@ -182,9 +182,9 @@ If FastAPI is chosen for Phase 3, the deployment layer should be intentionally t
 5. apply the saved Phase 2 threshold;
 6. return the probability and predicted class.
 
-The deployment service therefore **serves** the trained model; it does not train, select or tune it. Model development remains in Phase 2, while Phase 3 consumes the frozen artifact for inference.
+FastAPI therefore **serves** the trained model; it does not train, select or tune it. Model development remains in Phase 2, while FastAPI consumes the frozen artifact for inference.
 
-The course requires a deployed POC/MVP that is accessible via a live URL, demonstrates at least one deployed model and includes clear usage instructions. It lists Streamlit Cloud, FastAPI, Gradio or similar as deployment options; it does **not** require a separate user-interface layer. Because the Olist data is historical, the deployed application may predict on held-out historical records to simulate new orders and does not need a live order feed. This page therefore documents only the Phase 2 model handoff; the final Phase 3 deployment technology can be chosen separately.
+For now, this workflow intentionally stops at the FastAPI serving boundary. No separate UI layer is part of this design.
 
 ## Feature Contract
 
