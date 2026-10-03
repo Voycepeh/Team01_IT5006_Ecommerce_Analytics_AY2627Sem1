@@ -12,6 +12,11 @@ The Phase 1 dashboard preparation workflow writes:
 data/processed/dashboard_orders.parquet
 ```
 
+Phase 1 EDA also provides `order_level.csv`, `item_level.csv`, `products_clean.csv`,
+and `reviews_dedup.csv` in `data/processed/`. Phase 2 classification consumes the first
+two CSVs as its cleaned analytical source layer. It does not use the dashboard Parquet;
+see [`docs/phase2-classification-workflow.md`](../docs/phase2-classification-workflow.md).
+
 One row in this processed dataset represents one order. Item, payment, and review tables
 are reduced to order level before joining so orders are not duplicated. For orders with
 multiple product categories or seller states, the primary value is the most frequent item
