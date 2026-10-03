@@ -52,11 +52,25 @@ def threshold_table(
     )
 
 
-def select_f1_threshold(table: pd.DataFrame) -> float:
-    """Select highest F1, breaking ties toward the lower (recall-favouring) threshold."""
-    required = {"threshold", "f1"}
+def best_threshold_by_metric(table: pd.DataFrame, *, metric: str = "f1") -> float:
+    """Return a statistical threshold candidate that maximises ``metric``.
+
+    Ties favour the lower, recall-favouring threshold. This helper does not make
+    the operating decision: the team must select that threshold from training
+    or OOF analysis using the stakeholder costs of missed cases and unnecessary
+    outreach. Protected test results must never be used for this choice.
+    """
+    required = {"threshold", metric}
     if missing := required.difference(table.columns):
         raise ValueError(f"threshold table is missing columns: {sorted(missing)}")
     if table.empty:
         raise ValueError("threshold table must not be empty")
-    return float(table.sort_values(["f1", "threshold"], ascending=[False, True]).iloc[0]["threshold"])
+    if not pd.api.types.is_numeric_dtype(table[metric]):
+        raise ValueError(f"metric must be numeric: {metric}")
+    candidates = table.loc[np.isfinite(table[metric])]
+    if candidates.empty:
+        raise ValueError(f"metric has no finite values: {metric}")
+    return float(
+        candidates.sort_values([metric, "threshold"], ascending=[False, True])
+        .iloc[0]["threshold"]
+    )

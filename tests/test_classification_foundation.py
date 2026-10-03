@@ -4,16 +4,15 @@ import numpy as np
 import pandas as pd
 import pytest
 
-pytest.importorskip("sklearn", reason="classification tests require project dependencies")
-
 from src.classification_data import (
     MODEL_FEATURES,
     OUTPUT_COLUMNS,
     TARGET_COLUMN,
     build_classification_dataset,
+    review_timing_audit,
     split_features_target,
 )
-from src.classification_evaluation import select_f1_threshold, threshold_table
+from src.classification_evaluation import best_threshold_by_metric, threshold_table
 from src.classification_model import build_logistic_pipeline, predict_from_artifact
 
 
@@ -86,6 +85,22 @@ def test_dataset_rejects_duplicate_order_grain() -> None:
         build_classification_dataset(orders, items)
 
 
+def test_review_timing_is_audited_but_does_not_filter_training_rows() -> None:
+    orders, items = make_inputs()
+    orders.loc[0, "review_answer_timestamp"] = "2018-01-09"
+    orders.loc[1, "review_answer_timestamp"] = None
+    orders.loc[2, "review_answer_timestamp"] = "not-a-date"
+
+    result = build_classification_dataset(orders, items)
+    audit = review_timing_audit(orders)
+
+    assert len(result) == len(orders)
+    assert audit["training_population"] == len(orders)
+    assert audit["review_answer_at_or_before_delivery"] == 1
+    assert audit["review_answer_missing"] == 1
+    assert audit["review_answer_unparseable"] == 1
+
+
 def test_pipeline_and_inference_contract_work_end_to_end() -> None:
     orders, items = make_inputs()
     dataset = build_classification_dataset(orders, items)
@@ -106,7 +121,7 @@ def test_pipeline_and_inference_contract_work_end_to_end() -> None:
     assert set(predictions["predicted_negative_review"]).issubset({0, 1})
 
 
-def test_threshold_selection_uses_documented_tie_break() -> None:
+def test_metric_candidate_uses_documented_tie_break() -> None:
     table = threshold_table(
         pd.Series([0, 0, 1, 1]),
         np.array([0.1, 0.4, 0.6, 0.9]),
@@ -115,4 +130,4 @@ def test_threshold_selection_uses_documented_tie_break() -> None:
     duplicated_best = pd.DataFrame({"threshold": [0.5, 0.4], "f1": [0.8, 0.8]})
 
     assert table["threshold"].tolist() == [0.3, 0.5, 0.7]
-    assert select_f1_threshold(duplicated_best) == 0.4
+    assert best_threshold_by_metric(duplicated_best, metric="f1") == 0.4

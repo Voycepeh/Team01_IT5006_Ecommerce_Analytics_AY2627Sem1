@@ -118,6 +118,61 @@ def _aggregate_item_features(item_level: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
+def review_timing_audit(order_level: pd.DataFrame) -> pd.Series:
+    """Count review-timing conditions without changing modelling eligibility.
+
+    Parameters
+    ----------
+    order_level:
+        Phase 1 order-grain data. It must contain ``order_status``,
+        ``order_delivered_customer_date``, ``review_score`` and
+        ``review_answer_timestamp``.
+
+    Returns
+    -------
+    pandas.Series
+        Named counts for the retrospective training population: total rows,
+        missing or unparseable review-answer timestamps, answers at/before
+        delivery, and answers after delivery. Review timing is outcome-side
+        audit information and is never returned as a model feature.
+    """
+    required = {
+        "order_status",
+        "order_delivered_customer_date",
+        "review_score",
+        "review_answer_timestamp",
+    }
+    _require_columns(order_level, required, "order_level")
+    delivered_at = pd.to_datetime(
+        order_level["order_delivered_customer_date"], errors="coerce"
+    )
+    answered_at = pd.to_datetime(order_level["review_answer_timestamp"], errors="coerce")
+    population = (
+        order_level["order_status"].eq("delivered")
+        & delivered_at.notna()
+        & order_level["review_score"].notna()
+    )
+    raw_answer_present = order_level["review_answer_timestamp"].notna()
+    comparable = population & answered_at.notna()
+    return pd.Series(
+        {
+            "training_population": int(population.sum()),
+            "review_answer_missing": int((population & ~raw_answer_present).sum()),
+            "review_answer_unparseable": int(
+                (population & raw_answer_present & answered_at.isna()).sum()
+            ),
+            "review_answer_at_or_before_delivery": int(
+                (comparable & answered_at.le(delivered_at)).sum()
+            ),
+            "review_answer_after_delivery": int(
+                (comparable & answered_at.gt(delivered_at)).sum()
+            ),
+        },
+        name="orders",
+        dtype="int64",
+    )
+
+
 def build_classification_dataset(
     order_level: pd.DataFrame,
     item_level: pd.DataFrame,
@@ -137,11 +192,11 @@ def build_classification_dataset(
     ---------------------------
     The prediction is made immediately after a delivered order reaches the
     customer and before the customer submits a review. Eligible rows therefore
-    have ``order_status == 'delivered'``, a customer-delivery timestamp, a
-    deduplicated review score, and a review answer timestamp strictly after
-    delivery. That temporal check ensures the stated prediction point exists.
-    The binary target is 1 for scores 1--2 and 0 for scores 3--5. One output row
-    represents one eligible order.
+    have ``order_status == 'delivered'``, a customer-delivery timestamp and a
+    deduplicated review score. The binary target is 1 for scores 1--2 and 0 for
+    scores 3--5. One output row represents one eligible order. Review timing is
+    not an eligibility filter: use ``review_timing_audit`` to surface apparent
+    timing inconsistencies for team review without silently discarding them.
 
     Leakage restrictions
     --------------------
@@ -169,24 +224,18 @@ def build_classification_dataset(
         values = sorted(non_null_scores.loc[invalid_scores].unique().tolist())
         raise ValueError(f"review_score contains values outside 1--5: {values}")
 
-    timestamps = order_level[
-        ["order_delivered_customer_date", "review_answer_timestamp"]
-    ].apply(pd.to_datetime, errors="coerce")
-    malformed_dates = (
-        order_level[["order_delivered_customer_date", "review_answer_timestamp"]]
-        .notna()
-        & timestamps.isna()
+    delivered_at = pd.to_datetime(
+        order_level["order_delivered_customer_date"], errors="coerce"
     )
-    if malformed_dates.any().any():
-        bad_columns = malformed_dates.any().loc[lambda values: values].index.tolist()
-        raise ValueError(f"Unparseable timestamps in columns: {bad_columns}")
+    malformed_delivery = (
+        order_level["order_delivered_customer_date"].notna() & delivered_at.isna()
+    )
+    if malformed_delivery.any():
+        raise ValueError("Unparseable timestamps in order_delivered_customer_date")
 
     eligible = order_level.loc[
         order_level["order_status"].eq("delivered")
-        & timestamps["order_delivered_customer_date"].notna()
-        & timestamps["review_answer_timestamp"].gt(
-            timestamps["order_delivered_customer_date"]
-        )
+        & delivered_at.notna()
         & order_level["review_score"].notna()
     ].copy()
     if eligible.empty:
