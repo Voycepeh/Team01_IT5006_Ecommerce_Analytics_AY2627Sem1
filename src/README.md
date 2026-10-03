@@ -13,8 +13,8 @@ Use this folder for reusable project code that supports data preparation, analys
 
 ## Phase 2 classification
 
-- `classification_data.py` constructs and validates the negative-review model table from
-  Phase 1 processed CSVs and owns the explicit feature contract.
+- `classification_data.py` constructs and validates the late-delivery negative-review model
+  table from Phase 1 processed CSVs and owns the explicit feature contract.
 - `classification_model.py` owns leakage-safe sklearn preprocessing, the dummy baseline,
   Logistic Regression, and the versioned inference artifact interface.
 - `classification_evaluation.py` owns imbalance-aware metrics and training-only threshold

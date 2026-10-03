@@ -77,6 +77,9 @@ def test_dataset_has_explicit_schema_and_binary_target() -> None:
     assert result[TARGET_COLUMN].tolist().count(1) == 4
     assert "review_comment_message" not in result
     assert result["product_volume_cm3_mean"].eq(200.0).all()
+    features, _ = split_features_target(result)
+    assert features.columns.tolist() == MODEL_FEATURES
+    assert not any(column.startswith("review_") for column in features.columns)
 
 
 def test_dataset_rejects_duplicate_order_grain() -> None:
@@ -87,15 +90,18 @@ def test_dataset_rejects_duplicate_order_grain() -> None:
         build_classification_dataset(orders, items)
 
 
-def test_on_time_order_is_excluded_while_late_order_remains() -> None:
+@pytest.mark.parametrize("days_early", [0.0, 3.0])
+def test_on_time_or_early_order_is_excluded_while_late_orders_remain(
+    days_early: float,
+) -> None:
     orders, items = make_inputs()
-    on_time_order_id = orders.loc[0, "order_id"]
-    orders.loc[0, "days_early"] = 0.0
+    excluded_order_id = orders.loc[0, "order_id"]
+    orders.loc[0, "days_early"] = days_early
     orders.loc[0, "late_delivery_flag"] = 0.0
 
     result = build_classification_dataset(orders, items)
 
-    assert on_time_order_id not in set(result["order_id"])
+    assert excluded_order_id not in set(result["order_id"])
     assert len(result) == len(orders) - 1
     assert result["days_early"].lt(0).all()
 

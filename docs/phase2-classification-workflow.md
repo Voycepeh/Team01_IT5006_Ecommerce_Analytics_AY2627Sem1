@@ -65,6 +65,8 @@ Model binaries are generated outputs and are not added by this foundation PR.
   means early, zero means on the promised day and negative means late. The builder validates
   that `late_delivery_flag` agrees with this convention and carries `days_early` through
   unchanged as the initial lateness-severity candidate.
+- Lateness bands are not separate targets or separate models. The target remains negative
+  review yes/no, while lateness severity is one input to the same Logistic Regression.
 - `review_timing_audit()` separately counts missing, unparseable, at/before-delivery and
   after-delivery review answers. These outcome-side fields support data-quality discussion
   only and are never predictors.
@@ -140,6 +142,9 @@ because numeric inputs are scaled. The current one-hot encoder uses `drop=None`,
 no omitted categorical reference level; a direct A-versus-B comparison uses
 `exp(coefficient_A - coefficient_B)`. Interpret results as associations, not causes, and let
 the team write business implications only after reviewing the actual fitted evidence.
+If useful after fitting, the team may illustrate predictions at 1, 3, 5 and 10 days late
+(`days_early = -1, -3, -5, -10`) only with a documented, defensible profile for all other
+features. This would be an interpretation illustration, not fabricated daily snapshots.
 
 ## Team collaboration
 

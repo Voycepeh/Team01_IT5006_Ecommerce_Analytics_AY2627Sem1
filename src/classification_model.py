@@ -1,4 +1,4 @@
-"""Leakage-safe sklearn components for negative-review classification."""
+"""Sklearn components for negative-review classification among late deliveries."""
 
 from __future__ import annotations
 
