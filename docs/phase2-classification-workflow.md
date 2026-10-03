@@ -143,7 +143,7 @@ The notebook reloads that artifact and scores one held-out-shaped row using `pre
 
 ## Deployment Flow
 
-Following the lecturer's three-part architecture, the project separates **Part 1: Training**, **Part 2: FastAPI**, and **Part 3: Streamlit**. Phase 2 separates **training** from **serving predictions**. The notebook is responsible for fitting and validating the model. The deployment layer should load the frozen artifact rather than retraining the model whenever a prediction is requested.
+Phase 2 separates **training** from **serving predictions**. The notebook is responsible for fitting and validating the model. The deployment layer should load the frozen artifact rather than retraining the model whenever a prediction is requested.
 
 ```mermaid
 flowchart LR
@@ -171,9 +171,9 @@ The current GitHub Actions workflow executes the canonical notebook and preserve
 
 These are uploaded as CI artifacts rather than committing the generated binary model into Git history.
 
-### Phase 3 serving responsibility
+### Phase 3 deployment handoff
 
-The planned FastAPI layer should be intentionally thin:
+If FastAPI is chosen for Phase 3, the deployment layer should be intentionally thin:
 
 1. start the API and load the approved `.pkl` artifact;
 2. accept the required order features at a prediction endpoint such as `POST /predict`;
@@ -182,9 +182,9 @@ The planned FastAPI layer should be intentionally thin:
 5. apply the saved Phase 2 threshold;
 6. return the probability and predicted class.
 
-FastAPI therefore **serves** the trained model; it does not train, select or tune it. Model development remains in Phase 2, while Phase 3 consumes the frozen artifact for inference.
+The deployment service therefore **serves** the trained model; it does not train, select or tune it. Model development remains in Phase 2, while Phase 3 consumes the frozen artifact for inference.
 
-The exact Phase 3 API schema and application behaviour should be finalised against the course's Phase 3 requirements before implementation. This page documents the handoff already supported by the Phase 2 artifact, not an API that has already been built.
+The course requires a deployed POC/MVP that is accessible via a live URL, demonstrates at least one deployed model and includes clear usage instructions. It lists Streamlit Cloud, FastAPI, Gradio or similar as deployment options; it does **not** require a separate user-interface layer. Because the Olist data is historical, the deployed application may predict on held-out historical records to simulate new orders and does not need a live order feed. This page therefore documents only the Phase 2 model handoff; the final Phase 3 deployment technology can be chosen separately.
 
 ## Feature Contract
 
