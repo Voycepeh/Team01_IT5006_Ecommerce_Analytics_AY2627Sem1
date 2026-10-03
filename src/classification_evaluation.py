@@ -1,4 +1,4 @@
-"""Evaluation utilities that keep threshold selection away from the test set."""
+"""Evaluation metrics for the Phase 2 Logistic Regression model."""
 
 from __future__ import annotations
 
@@ -33,44 +33,3 @@ def classification_metrics(
         "roc_auc": roc_auc_score(y_true, probabilities),
     }
 
-
-def threshold_table(
-    y_true: pd.Series | np.ndarray,
-    probabilities: np.ndarray,
-    *,
-    thresholds: np.ndarray | None = None,
-) -> pd.DataFrame:
-    """Summarise candidate thresholds using validation or OOF probabilities only."""
-    candidates = thresholds if thresholds is not None else np.arange(0.05, 1.0, 0.05)
-    return pd.DataFrame(
-        [
-            {"threshold": float(value), **classification_metrics(
-                y_true, probabilities, threshold=float(value)
-            )}
-            for value in candidates
-        ]
-    )
-
-
-def best_threshold_by_metric(table: pd.DataFrame, *, metric: str = "f1") -> float:
-    """Return a statistical threshold candidate that maximises ``metric``.
-
-    Ties favour the lower, recall-favouring threshold. This helper does not make
-    the operating decision: the team must select that threshold from training
-    or OOF analysis using the stakeholder costs of missed cases and unnecessary
-    outreach. Protected test results must never be used for this choice.
-    """
-    required = {"threshold", metric}
-    if missing := required.difference(table.columns):
-        raise ValueError(f"threshold table is missing columns: {sorted(missing)}")
-    if table.empty:
-        raise ValueError("threshold table must not be empty")
-    if not pd.api.types.is_numeric_dtype(table[metric]):
-        raise ValueError(f"metric must be numeric: {metric}")
-    candidates = table.loc[np.isfinite(table[metric])]
-    if candidates.empty:
-        raise ValueError(f"metric has no finite values: {metric}")
-    return float(
-        candidates.sort_values([metric, "threshold"], ascending=[False, True])
-        .iloc[0]["threshold"]
-    )
