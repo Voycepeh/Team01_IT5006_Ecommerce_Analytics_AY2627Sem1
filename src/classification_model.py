@@ -7,7 +7,6 @@ from typing import Any
 import joblib
 import pandas as pd
 from sklearn.compose import ColumnTransformer
-from sklearn.dummy import DummyClassifier
 from sklearn.impute import SimpleImputer
 from sklearn.linear_model import LogisticRegression
 from sklearn.pipeline import Pipeline
@@ -42,9 +41,7 @@ def build_preprocessor() -> ColumnTransformer:
     )
 
 
-def build_logistic_pipeline(
-    *, random_state: int = 42, class_weight: str | dict[int, float] | None = None
-) -> Pipeline:
+def build_logistic_pipeline(*, random_state: int = 42) -> Pipeline:
     """Return an unfitted preprocessing + Logistic Regression pipeline."""
     return Pipeline(
         [
@@ -54,18 +51,9 @@ def build_logistic_pipeline(
                 LogisticRegression(
                     max_iter=1_000,
                     random_state=random_state,
-                    class_weight=class_weight,
                 ),
             ),
         ]
-    )
-
-
-def build_dummy_pipeline(*, strategy: str = "prior") -> Pipeline:
-    """Return an unfitted baseline using the identical learned preprocessing."""
-    return Pipeline(
-        [("preprocessor", build_preprocessor()),
-         ("classifier", DummyClassifier(strategy=strategy))]
     )
 
 
@@ -76,7 +64,7 @@ def save_inference_artifact(
     threshold: float,
     metadata: dict[str, Any] | None = None,
 ) -> None:
-    """Save a deployment-ready bundle; callers must choose the threshold on training data."""
+    """Save the fitted preprocessing + Logistic Regression pipeline for inference."""
     if not 0 <= threshold <= 1:
         raise ValueError("threshold must be between 0 and 1")
     if not hasattr(fitted_pipeline, "classes_"):
