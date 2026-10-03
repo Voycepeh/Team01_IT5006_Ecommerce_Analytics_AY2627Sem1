@@ -34,4 +34,4 @@ jobs:
           name: phase2-classification-outputs
           path: |
             notebooks/phase2_negative_review_classification.executed.ipynb
-            deployment/negative_review_logistic.joblib
+            deployment/negative_review_logistic_pipeline.pkl
