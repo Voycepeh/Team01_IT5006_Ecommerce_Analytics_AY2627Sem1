@@ -22,18 +22,52 @@ cleaning, consume `dashboard_orders.parquet`, or implement the Phase 3 applicati
 
 ```mermaid
 flowchart LR
-    P1[Phase 1 processed CSVs<br/>order_level + item_level] --> D[Classification-specific<br/>dataset construction]
-    D --> XY[Explicit X / y contract]
-    XY --> S{Protected<br/>stratified split}
-    S -->|Training only| CV[Training and<br/>stratified CV]
-    CV --> OOF[OOF probabilities]
-    OOF --> TA[Threshold analysis<br/>and human decision]
-    TA --> FF[Final fit on<br/>all training rows]
-    S -->|Seal until model and<br/>threshold are frozen| TEST[(Protected test set)]
-    FF --> E[One-time final<br/>test evaluation]
-    TEST --> E
-    E --> A[Saved inference artifact]
-    A --> H[Phase 3 handoff]
+    P1[(Phase 1 processed CSVs<br/>order_level + item_level)]
+
+    subgraph WA["A · Data & Feature Contract"]
+        BUILD[Build classification dataset]
+        AUDIT[Feature & leakage audit]
+        XY[Explicit X + y contract]
+        BUILD --> AUDIT --> XY
+    end
+
+    SPLIT{Protected stratified<br/>train / test split}
+    TEST[(Protected test set<br/>held back)]
+
+    subgraph WB["B · Training-only Model Development"]
+        DUMMY[Dummy baseline]
+        LR[Logistic Regression]
+        CV[Stratified cross-validation]
+        REFINE[Controlled LR refinement]
+        DUMMY --> CV
+        LR --> CV --> REFINE
+    end
+
+    subgraph WC["C · Evaluation & Decision"]
+        OOF[OOF probabilities]
+        THRESH[Threshold analysis<br/>stakeholder trade-off]
+        FREEZE[Freeze model + threshold]
+        FIT[Final fit on all training rows]
+        FINAL[One-time final evaluation]
+        INTERPRET[Coefficients & odds ratios]
+        ERRORS[Error analysis]
+        DECIDE[Final model decision]
+        OOF --> THRESH --> FREEZE --> FIT --> FINAL
+        FINAL --> INTERPRET --> DECIDE
+        FINAL --> ERRORS --> DECIDE
+    end
+
+    ARTIFACT[(Inference artifact<br/>pipeline + threshold + metadata)]
+    HANDOFF[Phase 3 deployment handoff]
+
+    P1 --> BUILD
+    XY --> SPLIT
+    SPLIT -->|Training rows only| DUMMY
+    SPLIT -->|Training rows only| LR
+    SPLIT -->|Seal immediately| TEST
+    REFINE --> OOF
+    TEST -.->|Open only after freeze| FINAL
+    DECIDE --> ARTIFACT --> HANDOFF
 ```
 
 ## Inputs and Outputs
@@ -137,14 +171,22 @@ the owned files below; integration into the notebook happens in short, reviewed 
 | C — evaluation, interpretation and handoff | `src/classification_evaluation.py`; notebook threshold, test, coefficient, errors and artifact sections | Consumes frozen OOF/test predictions plus fitted pipeline; publishes threshold rationale, final evaluation, interpretation and artifact metadata |
 
 ```mermaid
-flowchart TB
-    A[Workstream A<br/>data contract, construction,<br/>feature and leakage audit]
-    B[Workstream B<br/>dummy baseline, Logistic Regression,<br/>stratified CV and refinement]
-    C[Workstream C<br/>evaluation, OOF threshold analysis,<br/>interpretation and artifact handoff]
-    A --> N[Canonical classification notebook<br/>one integrator at a time]
-    B --> N
-    C --> N
-    N --> R[Reviewed Phase 2 evidence]
+flowchart LR
+    CONTRACT[Shared contract<br/>problem + prediction point + features]
+
+    CONTRACT --> PA[Person A<br/>data & feature audit]
+    CONTRACT --> PB[Person B<br/>modelling & CV]
+    CONTRACT --> PC[Person C<br/>evaluation & interpretation]
+
+    PA --> MA[classification_data.py]
+    PB --> MB[classification_model.py]
+    PC --> MC[classification_evaluation.py]
+
+    MA --> N[Canonical classification notebook<br/>one integrator at a time]
+    MB --> N
+    MC --> N
+    N --> REVIEW[Team review]
+    REVIEW --> RESULT[Phase 2 result]
 ```
 
 ### Coordination rules
