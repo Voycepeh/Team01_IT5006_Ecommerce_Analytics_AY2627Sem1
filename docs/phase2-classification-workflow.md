@@ -131,6 +131,16 @@ predictive relationships between features and the target. It retains the same pr
 pipeline for interface consistency and a like-for-like CV call. The fitted transformations
 do **not** make the Dummy classifier feature-informed.
 
+### Logistic Regression interpretation
+
+After the final fit, the notebook calculates `Odds Ratio = exp(Coefficient)` and
+`% Change in Odds = (Odds Ratio - 1) * 100` for the outcome
+`is_negative_review = 1`. Numeric coefficients represent a one-standard-deviation increase
+because numeric inputs are scaled. The current one-hot encoder uses `drop=None`, so there is
+no omitted categorical reference level; a direct A-versus-B comparison uses
+`exp(coefficient_A - coefficient_B)`. Interpret results as associations, not causes, and let
+the team write business implications only after reviewing the actual fitted evidence.
+
 ## Team collaboration
 
 The three teammates can divide the late-delivery cohort/feature audit, model development, and
