@@ -28,8 +28,10 @@ jobs:
       - name: Execute notebook
         run: |
           jupyter nbconvert             --to notebook             --execute notebooks/phase2_negative_review_classification.ipynb             --output phase2_negative_review_classification.executed.ipynb             --ExecutePreprocessor.timeout=1200
-      - name: Upload executed notebook
+      - name: Upload Phase 2 outputs
         uses: actions/upload-artifact@v4
         with:
-          name: phase2-classification-executed-notebook
-          path: notebooks/phase2_negative_review_classification.executed.ipynb
+          name: phase2-classification-outputs
+          path: |
+            notebooks/phase2_negative_review_classification.executed.ipynb
+            deployment/negative_review_logistic.joblib
