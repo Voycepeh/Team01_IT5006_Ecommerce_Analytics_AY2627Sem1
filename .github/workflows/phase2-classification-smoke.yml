@@ -16,6 +16,6 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install -r requirements.txt jupyter nbconvert
+      - run: pip install pandas numpy scikit-learn joblib matplotlib jupyter nbconvert
       - name: Execute Phase 2 classification notebook
         run: jupyter nbconvert --to notebook --execute notebooks/phase2_negative_review_classification.ipynb --output /tmp/phase2-executed.ipynb --ExecutePreprocessor.timeout=600
