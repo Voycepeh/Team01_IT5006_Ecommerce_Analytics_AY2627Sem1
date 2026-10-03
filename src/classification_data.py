@@ -46,7 +46,6 @@ ORDER_REQUIRED_COLUMNS = {
     "order_status",
     "order_delivered_customer_date",
     "review_score",
-    "review_answer_timestamp",
     "late_delivery_flag",
     *NUMERIC_FEATURES[:-3],
     *CATEGORICAL_FEATURES[:-1],
@@ -144,7 +143,7 @@ def build_classification_dataset(
     the promised day and negative means late. ``days_early`` is retained
     unchanged as the candidate lateness-severity feature; no competing sign
     convention is introduced. The binary target is 1 for scores 1--2 and 0 for
-    scores 3--5. One output row represents one eligible late order. Review
+    scores 3--5. One output row represents one eligible late order.
 
     Leakage restrictions
     --------------------
