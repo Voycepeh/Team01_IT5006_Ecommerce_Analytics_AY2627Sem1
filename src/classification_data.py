@@ -1,4 +1,4 @@
-"""Construct the Phase 2 negative-review classification dataset.
+"""Construct the Phase 2 negative-review dataset for late deliveries.
 
 This module consumes Phase 1 analytical CSV content, not the dashboard Parquet.
 It deliberately stops at deterministic, business-specific feature construction;
@@ -47,6 +47,7 @@ ORDER_REQUIRED_COLUMNS = {
     "order_delivered_customer_date",
     "review_score",
     "review_answer_timestamp",
+    "late_delivery_flag",
     *NUMERIC_FEATURES[:-3],
     *CATEGORICAL_FEATURES[:-1],
 }
@@ -126,7 +127,7 @@ def review_timing_audit(order_level: pd.DataFrame) -> pd.Series:
     order_level:
         Phase 1 order-grain data. It must contain ``order_status``,
         ``order_delivered_customer_date``, ``review_score`` and
-        ``review_answer_timestamp``.
+        ``review_answer_timestamp`` and Phase 1 ``late_delivery_flag``.
 
     Returns
     -------
@@ -141,6 +142,7 @@ def review_timing_audit(order_level: pd.DataFrame) -> pd.Series:
         "order_delivered_customer_date",
         "review_score",
         "review_answer_timestamp",
+        "late_delivery_flag",
     }
     _require_columns(order_level, required, "order_level")
     delivered_at = pd.to_datetime(
@@ -150,6 +152,7 @@ def review_timing_audit(order_level: pd.DataFrame) -> pd.Series:
     population = (
         order_level["order_status"].eq("delivered")
         & delivered_at.notna()
+        & order_level["late_delivery_flag"].eq(1)
         & order_level["review_score"].notna()
     )
     raw_answer_present = order_level["review_answer_timestamp"].notna()
@@ -177,7 +180,7 @@ def build_classification_dataset(
     order_level: pd.DataFrame,
     item_level: pd.DataFrame,
 ) -> pd.DataFrame:
-    """Build the model table for predicting a negative review after delivery.
+    """Build the model table for negative-review risk among late deliveries.
 
     Required inputs
     ---------------
@@ -190,13 +193,17 @@ def build_classification_dataset(
 
     Prediction point and target
     ---------------------------
-    The prediction is made immediately after a delivered order reaches the
+    The prediction is made immediately after a late delivery reaches the
     customer and before the customer submits a review. Eligible rows therefore
-    have ``order_status == 'delivered'``, a customer-delivery timestamp and a
-    deduplicated review score. The binary target is 1 for scores 1--2 and 0 for
-    scores 3--5. One output row represents one eligible order. Review timing is
-    not an eligibility filter: use ``review_timing_audit`` to surface apparent
-    timing inconsistencies for team review without silently discarding them.
+    have ``order_status == 'delivered'``, a customer-delivery timestamp,
+    Phase 1 ``late_delivery_flag == 1`` and a deduplicated review score. Phase 1
+    defines lateness as ``days_early < 0``: positive means early, zero means on
+    the promised day and negative means late. ``days_early`` is retained
+    unchanged as the candidate lateness-severity feature; no competing sign
+    convention is introduced. The binary target is 1 for scores 1--2 and 0 for
+    scores 3--5. One output row represents one eligible late order. Review
+    timing is not an eligibility filter: use ``review_timing_audit`` to surface
+    apparent inconsistencies without silently discarding observations.
 
     Leakage restrictions
     --------------------
@@ -224,6 +231,21 @@ def build_classification_dataset(
         values = sorted(non_null_scores.loc[invalid_scores].unique().tolist())
         raise ValueError(f"review_score contains values outside 1--5: {values}")
 
+    non_null_late_flags = order_level["late_delivery_flag"].dropna()
+    invalid_late_flags = ~non_null_late_flags.isin([0, 1])
+    if invalid_late_flags.any():
+        values = sorted(non_null_late_flags.loc[invalid_late_flags].unique().tolist())
+        raise ValueError(f"late_delivery_flag contains values outside 0/1: {values}")
+
+    timing_pairs = order_level[["days_early", "late_delivery_flag"]].dropna()
+    inconsistent_lateness = timing_pairs["late_delivery_flag"].ne(
+        timing_pairs["days_early"].lt(0).astype(int)
+    )
+    if inconsistent_lateness.any():
+        raise ValueError(
+            "late_delivery_flag conflicts with Phase 1 days_early sign convention"
+        )
+
     delivered_at = pd.to_datetime(
         order_level["order_delivered_customer_date"], errors="coerce"
     )
@@ -236,10 +258,11 @@ def build_classification_dataset(
     eligible = order_level.loc[
         order_level["order_status"].eq("delivered")
         & delivered_at.notna()
+        & order_level["late_delivery_flag"].eq(1)
         & order_level["review_score"].notna()
     ].copy()
     if eligible.empty:
-        raise ValueError("No delivered orders with review scores are available")
+        raise ValueError("No late delivered orders with review scores are available")
 
     item_features = _aggregate_item_features(item_level)
     missing_item_orders = ~eligible["order_id"].isin(item_features["order_id"])
@@ -258,6 +281,8 @@ def build_classification_dataset(
         raise AssertionError("Classification target must be binary")
     if dataset[TARGET_COLUMN].nunique() != 2:
         raise ValueError("Classification dataset must contain both target classes")
+    if not dataset["days_early"].lt(0).all():
+        raise AssertionError("Classification dataset must contain late deliveries only")
     if np.isinf(dataset[NUMERIC_FEATURES].to_numpy(dtype=float)).any():
         raise ValueError("Numeric model features contain infinite values")
     return dataset.reset_index(drop=True)

@@ -21,7 +21,7 @@ from src.classification_data import (
 
 
 ARTIFACT_VERSION = 1
-PREDICTION_POINT = "after customer delivery and before review submission"
+PREDICTION_POINT = "after a late customer delivery and before review submission"
 
 
 def build_preprocessor() -> ColumnTransformer:

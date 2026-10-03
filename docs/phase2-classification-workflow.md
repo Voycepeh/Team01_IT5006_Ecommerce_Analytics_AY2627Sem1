@@ -2,12 +2,11 @@
 
 ## Big Picture
 
-Phase 2 frames customer-experience risk as: **after an order reaches the customer,
-will its eventual review be negative (1 or 2 stars)?** The customer-experience team
-could use the probability to prioritise proactive support while there is still time
-to resolve a poor experience. The prediction point is deliberately after delivery and
-before review submission. Delivery performance can therefore be used, but nothing from
-the review except its score may enter target construction.
+Phase 2 asks: **among orders delivered late, which are likely to receive a negative review
+(1 or 2 stars)?** Once a late order arrives, the customer-experience team can use the risk
+estimate to prioritise recovery or outreach. The prediction point is immediately after the
+late delivery is completed and before the review is known. Delivery performance can therefore
+be used, but nothing from the review except its score may enter target construction.
 
 The first model family is Logistic Regression. It is suitable as a transparent course-level
 baseline, supports probability estimates and allows coefficient/odds-ratio interpretation.
@@ -22,7 +21,7 @@ cleaning, consume `dashboard_orders.parquet`, or implement the Phase 3 applicati
 
 ```mermaid
 flowchart TD
-    P1[Phase 1 processed data] --> BUILD[Build classification dataset]
+    P1[Phase 1 processed data] --> BUILD[Build late-delivery<br/>classification dataset]
     BUILD --> SPLIT{Protected stratified<br/>train / test split}
 
     SPLIT -->|Training data only| MODELS[Dummy baseline +<br/>Logistic Regression]
@@ -41,7 +40,7 @@ flowchart TD
 
 | Component | Receives | Returns / persists |
 | --- | --- | --- |
-| `build_classification_dataset` | Phase 1 `order_level.csv` (one row/order) and `item_level.csv` (one row/order item) | One row per eligible delivered, reviewed order; trace-only `order_id`, explicit model features, binary target |
+| `build_classification_dataset` | Phase 1 `order_level.csv` (one row/order) and `item_level.csv` (one row/order item) | One row per late, delivered, reviewed order; trace-only `order_id`, explicit model features, binary target |
 | `split_features_target` | Contracted classification dataset | `X` containing only the allow-listed features and binary `y` |
 | `build_preprocessor` | Numeric and categorical columns named in `classification_data.py` | Unfitted `ColumnTransformer`; median imputation/scaling and mode imputation/OHE are learned only during fitting |
 | `build_logistic_pipeline` | Contracted feature frame at `.fit()` | Unfitted end-to-end Logistic Regression pipeline |
@@ -58,9 +57,14 @@ Model binaries are generated outputs and are not added by this foundation PR.
 
 ### Eligibility, grain and target
 
-- Eligible examples are delivered orders with a non-null customer-delivery timestamp and
-  deduplicated review score. This is the retrospective population needed to construct the
-  target; review-answer timing does not silently remove otherwise usable observations.
+- Eligible examples are delivered orders with a non-null customer-delivery timestamp,
+  Phase 1 `late_delivery_flag == 1` and a deduplicated review score. This is the
+  retrospective population needed to construct the target; review-answer timing does not
+  silently remove otherwise usable observations.
+- Phase 1 defines `days_early = estimated delivery date - actual delivery date`: positive
+  means early, zero means on the promised day and negative means late. The builder validates
+  that `late_delivery_flag` agrees with this convention and carries `days_early` through
+  unchanged as the initial lateness-severity candidate.
 - `review_timing_audit()` separately counts missing, unparseable, at/before-delivery and
   after-delivery review answers. These outcome-side fields support data-quality discussion
   only and are never predictors.
@@ -109,8 +113,9 @@ authoritative in `NUMERIC_FEATURES` and `CATEGORICAL_FEATURES`.
 | `order_id` | `order_level` | Excluded identifier | Yes | No | Retained only to trace errors and joins |
 | `customer_id`, `customer_unique_id`, `product_id`, `seller_id` | processed source tables | Excluded identifier | Yes | No | High-cardinality entity keys risk memorisation and are not deployable signals here |
 | `order_status` | `order_level` | Excluded constant/non-useful | Yes | No | Eligibility fixes the modelling population to delivered orders |
+| `late_delivery_flag` | `order_level` | Cohort filter; excluded constant | Yes | No | Every modelling row is late, so the flag contains no predictive variation |
 | Raw purchase, approval, carrier, delivery and estimate timestamps | `order_level` | Derived then excluded | Varies | No | Human-readable timestamps are transformed into reviewed temporal/duration fields |
-| `delivery_days`, `estimated_delivery_days`, `days_early` | `order_level` | Derived | Yes | Yes | Delivery performance is known at the after-delivery prediction point |
+| `delivery_days`, `estimated_delivery_days`, `days_early` | `order_level` | Derived | Yes | Yes | Delivery performance is known; Phase 1 `days_early` stays negative for this late-only cohort |
 | `item_count`, `order_item_value`, `order_freight_value`, `freight_share`, `seller_count` | `order_level` | Derived | Yes | Yes | Order composition/value information is known before delivery |
 | `payment_total`, `payment_count`, `max_installments` | `order_level` | Derived | Yes | Yes | Aggregated payment characteristics are available before delivery |
 | `customer_state`, `seller_state`, `same_state`, `n_seller_states` | `order_level` | Direct/derived | Yes | Yes | Coarse geography and route complexity without entity IDs |
@@ -128,7 +133,7 @@ do **not** make the Dummy classifier feature-informed.
 
 ## Team collaboration
 
-The three teammates can divide the data/feature audit, model development, and
+The three teammates can divide the late-delivery cohort/feature audit, model development, and
 evaluation/interpretation sections, along with their supporting functions in `src/`. Use
 separate branches where practical, avoid editing the same `.ipynb` simultaneously, and use
 one notebook integrator when changes need to be combined. The team should review the shared

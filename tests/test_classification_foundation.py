@@ -38,7 +38,9 @@ def make_inputs() -> tuple[pd.DataFrame, pd.DataFrame]:
                 "freight_share": 0.15,
                 "delivery_days": 5.0 + index % 2,
                 "estimated_delivery_days": 10,
-                "days_early": 5.0 - index % 2,
+                # Phase 1 convention: negative means delivered late.
+                "days_early": -1.0 - index % 2,
+                "late_delivery_flag": 1.0,
                 "n_seller_states": 1,
                 "customer_state": "SP" if index % 2 else "RJ",
                 "seller_state": "SP",
@@ -83,6 +85,19 @@ def test_dataset_rejects_duplicate_order_grain() -> None:
 
     with pytest.raises(ValueError, match="duplicate rows"):
         build_classification_dataset(orders, items)
+
+
+def test_on_time_order_is_excluded_while_late_order_remains() -> None:
+    orders, items = make_inputs()
+    on_time_order_id = orders.loc[0, "order_id"]
+    orders.loc[0, "days_early"] = 0.0
+    orders.loc[0, "late_delivery_flag"] = 0.0
+
+    result = build_classification_dataset(orders, items)
+
+    assert on_time_order_id not in set(result["order_id"])
+    assert len(result) == len(orders) - 1
+    assert result["days_early"].lt(0).all()
 
 
 def test_review_timing_is_audited_but_does_not_filter_training_rows() -> None:
