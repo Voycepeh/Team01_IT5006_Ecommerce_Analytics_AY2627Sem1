@@ -21,53 +21,20 @@ helpers, and a versioned inference bundle contract. It does **not** rebuild gene
 cleaning, consume `dashboard_orders.parquet`, or implement the Phase 3 application.
 
 ```mermaid
-flowchart LR
-    P1[(Phase 1 processed CSVs<br/>order_level + item_level)]
+flowchart TD
+    P1[Phase 1 processed data] --> BUILD[Build classification dataset]
+    BUILD --> SPLIT{Protected stratified<br/>train / test split}
 
-    subgraph WA["A · Data & Feature Contract"]
-        BUILD[Build classification dataset]
-        AUDIT[Feature & leakage audit]
-        XY[Explicit X + y contract]
-        BUILD --> AUDIT --> XY
-    end
+    SPLIT -->|Training data only| MODELS[Dummy baseline +<br/>Logistic Regression]
+    MODELS --> CV[Stratified cross-validation<br/>and OOF probabilities]
+    CV --> DECIDE[Model and threshold decision]
 
-    SPLIT{Protected stratified<br/>train / test split}
-    TEST[(Protected test set<br/>held back)]
+    SPLIT -->|Hold untouched| TEST[(Protected test set)]
+    TEST -.->|Open only after decision| FINAL[Final evaluation]
+    DECIDE --> FINAL
 
-    subgraph WB["B · Training-only Model Development"]
-        DUMMY[Dummy baseline]
-        LR[Logistic Regression]
-        CV[Stratified cross-validation]
-        REFINE[Controlled LR refinement]
-        DUMMY --> CV
-        LR --> CV --> REFINE
-    end
-
-    subgraph WC["C · Evaluation & Decision"]
-        OOF[OOF probabilities]
-        THRESH[Threshold analysis<br/>stakeholder trade-off]
-        FREEZE[Freeze model + threshold]
-        FIT[Final fit on all training rows]
-        FINAL[One-time final evaluation]
-        INTERPRET[Coefficients & odds ratios]
-        ERRORS[Error analysis]
-        DECIDE[Final model decision]
-        OOF --> THRESH --> FREEZE --> FIT --> FINAL
-        FINAL --> INTERPRET --> DECIDE
-        FINAL --> ERRORS --> DECIDE
-    end
-
-    ARTIFACT[(Inference artifact<br/>pipeline + threshold + metadata)]
-    HANDOFF[Phase 3 deployment handoff]
-
-    P1 --> BUILD
-    XY --> SPLIT
-    SPLIT -->|Training rows only| DUMMY
-    SPLIT -->|Training rows only| LR
-    SPLIT -->|Seal immediately| TEST
-    REFINE --> OOF
-    TEST -.->|Open only after freeze| FINAL
-    DECIDE --> ARTIFACT --> HANDOFF
+    FINAL --> INTERPRET[Interpretation and conclusion]
+    INTERPRET --> SAVE[Save pipeline + threshold<br/>for Phase 3]
 ```
 
 ## Inputs and Outputs
@@ -129,9 +96,10 @@ the protected test set cannot participate in it.
 
 ### Feature contract and audit
 
-This table covers the actual Phase 1 fields used to construct the current allow-list and the
-important exclusions. Grouped rows share the same treatment and rationale; the exact model
-columns remain authoritative in `NUMERIC_FEATURES` and `CATEGORICAL_FEATURES`.
+This table covers the actual Phase 1 fields used to construct the **initial candidate feature
+set** and the important exclusions. The team must review this set before modelling. Grouped
+rows share the same treatment and rationale; the exact current allow-list remains
+authoritative in `NUMERIC_FEATURES` and `CATEGORICAL_FEATURES`.
 
 | Feature | Source | Treatment | Available at prediction point? | Model input? | Reason |
 | --- | --- | --- | --- | --- | --- |
@@ -158,61 +126,18 @@ predictive relationships between features and the target. It retains the same pr
 pipeline for interface consistency and a like-for-like CV call. The fitted transformations
 do **not** make the Dummy classifier feature-informed.
 
-## Three-person parallel workflow
+## Team collaboration
 
-Use one canonical notebook: `notebooks/phase2_negative_review_classification.ipynb`.
-Do not copy it per teammate. Each workstream should use its own branch and primarily edit
-the owned files below; integration into the notebook happens in short, reviewed commits.
+The three teammates can divide the data/feature audit, model development, and
+evaluation/interpretation sections, along with their supporting functions in `src/`. Use
+separate branches where practical, avoid editing the same `.ipynb` simultaneously, and use
+one notebook integrator when changes need to be combined. The team should review the shared
+prediction point, feature set, model evidence and final conclusions together.
 
-| Owner / workstream | Primary ownership | Interface to the others |
-| --- | --- | --- |
-| A — data contract and audit | `src/classification_data.py`; dataset/target and leakage-audit evidence | Publishes `OUTPUT_COLUMNS`, feature lists, eligibility counts and documented data issues; does not change model settings |
-| B — modelling and validation | `src/classification_model.py`; notebook split, dummy baseline, Logistic Regression and stratified CV sections | Consumes only `split_features_target()` output; publishes reproducible CV/OOF tables and candidate pipeline settings; does not edit dataset logic silently |
-| C — evaluation, interpretation and handoff | `src/classification_evaluation.py`; notebook threshold, test, coefficient, errors and artifact sections | Consumes frozen OOF/test predictions plus fitted pipeline; publishes threshold rationale, final evaluation, interpretation and artifact metadata |
+## Remaining analysis
 
-```mermaid
-flowchart LR
-    CONTRACT[Shared contract<br/>problem + prediction point + features]
-
-    CONTRACT --> PA[Person A<br/>data & feature audit]
-    CONTRACT --> PB[Person B<br/>modelling & CV]
-    CONTRACT --> PC[Person C<br/>evaluation & interpretation]
-
-    PA --> MA[classification_data.py]
-    PB --> MB[classification_model.py]
-    PC --> MC[classification_evaluation.py]
-
-    MA --> N[Canonical classification notebook<br/>one integrator at a time]
-    MB --> N
-    MC --> N
-    N --> REVIEW[Team review]
-    REVIEW --> RESULT[Phase 2 result]
-```
-
-### Coordination rules
-
-1. Agree on prediction point, target and feature contract before fitting. Contract changes
-   require review from all three workstreams.
-2. Assign one notebook integrator at a time. Other teammates contribute modules, tests,
-   small result tables or Markdown proposals rather than concurrent notebook edits.
-3. Never use the protected test labels to refine features, class weights, hyperparameters or
-   threshold. Record each decision and its training/CV evidence.
-4. Merge data-contract work first, modelling second, and evaluation/handoff third. Re-run the
-   complete notebook after each interface change and clear stale outputs before review.
-5. Humans must review, understand and validate AI-assisted code and analytical conclusions,
-   and declare AI use where required by the course.
-
-## Remaining Phase 2 work
-
-- Execute and review dataset/target audits against the shared Phase 1 CSVs.
-- Freeze the allowable predictors after a feature-availability and leakage review.
-- Establish dummy and default Logistic Regression results with stratified CV.
-- Refine only the Logistic Regression approach initially (for example class weight or
-  regularisation), recording each comparison rather than trying unrelated algorithms.
-- Generate training-only OOF probabilities and justify a stakeholder-appropriate threshold.
-- Evaluate exactly once on the protected test set; add confidence/variability context.
-- Interpret coefficients/odds ratios carefully, including one-hot reference categories and
-  the difference between association and causation; perform structured error analysis.
-- Save the approved artifact, reload it and run the documented inference smoke test.
-- Hand the artifact schema and prediction-point limitations to Phase 3; build no API until
-  the analytical decisions are approved.
+- Review the dataset, target balance and initial candidate features.
+- Compare the Dummy baseline and Logistic Regression using stratified cross-validation.
+- Use training-only OOF probabilities to choose and justify an operating threshold.
+- Evaluate once on the protected test set, then interpret coefficients and errors.
+- Save and smoke-test the approved artifact for the Phase 3 handoff.
