@@ -15,13 +15,22 @@ This page explains the simple Logistic Regression workflow used in the Phase 2 n
 ## Big Picture
 
 ```mermaid
-flowchart LR
-    A[Phase 1 data] --> B[Prepare late-order dataset]
-    B --> C[80/20 train-test split]
-    C --> D[Train Logistic Regression]
-    D --> E[Evaluate on test set]
-    E --> F[Interpret coefficients]
-    F --> G[Save .pkl model]
+flowchart TD
+    A[Phase 1 processed data] --> B[Prepare late-order dataset]
+    B --> C{80/20 train-test split}
+
+    C -->|80% training data| D[Preprocessing Pipeline]
+    D --> E[Baseline + Logistic Regression]
+    E --> F[5-fold Cross-Validation]
+    F --> G[Fit Final Logistic Regression]
+
+    C -->|20% test data| H[(Held-out Test Set)]
+    G --> I[Test Set Evaluation]
+    H --> I
+
+    I --> J[Interpret Results]
+    J --> K[Save .pkl]
+    K --> L[Phase 3 FastAPI]
 ```
 
 That is the whole modelling story. The notebook deliberately avoids model tournaments, class-weight variants, out-of-fold prediction logic and threshold optimisation.
