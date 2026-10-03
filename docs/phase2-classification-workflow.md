@@ -2,11 +2,31 @@
 
 ## Big Picture
 
-Phase 2 asks: **among orders delivered late, which are likely to receive a negative review
-(1 or 2 stars)?** Once a late order arrives, the customer-experience team can use the risk
-estimate to prioritise recovery or outreach. The prediction point is immediately after the
-late delivery is completed and before the review is known. Delivery performance can therefore
-be used, but nothing from the review except its score may enter target construction.
+**Research question:** Among orders delivered late, can we predict which are likely to
+receive a negative customer review (1 or 2 stars)?
+
+**Class being predicted: Negative review**
+
+- `1` = review score 1–2
+- `0` = review score 3–5
+
+**Population being studied:** Orders that were delivered late and subsequently received a
+review.
+
+**Key explanatory feature:** How late the delivery was. Phase 1 records this using
+`days_early`, where negative values represent late deliveries. For example, `-1` means 1 day
+late and `-10` means 10 days late.
+
+**Why this matters:** Not every late delivery receives a negative review. The model
+investigates whether the severity of lateness, together with other eligible order
+characteristics, can distinguish late deliveries that are more likely to receive a negative
+review.
+
+Late delivery is therefore the population filter, not the class being predicted. Once a late
+order arrives, the customer-experience team can use the estimated negative-review risk to
+prioritise recovery or outreach. The prediction point is immediately after the late delivery
+is completed and before the review is known. Delivery performance can therefore be used, but
+nothing from the review except its score may enter target construction.
 
 The first model family is Logistic Regression. It is suitable as a transparent course-level
 baseline, supports probability estimates and allows coefficient/odds-ratio interpretation.
