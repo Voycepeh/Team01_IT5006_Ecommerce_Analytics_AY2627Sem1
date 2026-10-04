@@ -1,4 +1,4 @@
-# Phase 2 — Negative Review Classification
+# Phase 2 — Late-Order Negative Review Classification
 
 This page explains the simple Logistic Regression workflow used in the Phase 2 notebook.
 

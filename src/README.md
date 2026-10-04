@@ -20,5 +20,5 @@ Use this folder for reusable project code that supports data preparation, analys
 - `classification_evaluation.py` owns imbalance-aware metrics and training-only threshold
   comparison helpers.
 
-See [`docs/phase2-classification-workflow.md`](../docs/phase2-classification-workflow.md)
+See [`docs/phase2-late-order-classification-workflow.md`](../docs/phase2-late-order-classification-workflow.md)
 for the big picture, component contracts, implementation decisions and parallel workflow.
