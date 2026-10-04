@@ -4,13 +4,22 @@ import pandas as pd
 import pytest
 
 from src.classification_data import (
+    DELIVERED_MODEL_FEATURES,
+    DELIVERED_OUTPUT_COLUMNS,
     MODEL_FEATURES,
     OUTPUT_COLUMNS,
     TARGET_COLUMN,
     build_classification_dataset,
+    build_delivered_order_classification_dataset,
+    split_delivered_order_features_target,
     split_features_target,
 )
-from src.classification_model import build_logistic_pipeline, predict_from_artifact
+from src.classification_model import (
+    build_delivered_order_logistic_pipeline,
+    build_logistic_pipeline,
+    predict_from_artifact,
+    predict_from_delivered_order_artifact,
+)
 
 
 def make_inputs() -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -117,6 +126,46 @@ def test_pipeline_and_inference_contract_work_end_to_end() -> None:
         "model_features": MODEL_FEATURES,
     }
     predictions = predict_from_artifact(artifact, features.iloc[:2])
+
+    assert predictions.shape == (2, 2)
+    assert predictions["negative_review_probability"].between(0, 1).all()
+    assert set(predictions["predicted_negative_review"]).issubset({0, 1})
+
+
+def test_delivered_order_dataset_includes_late_and_non_late_orders() -> None:
+    orders, items = make_inputs()
+    orders.loc[:5, "days_early"] = 2.0
+    orders.loc[:5, "late_delivery_flag"] = 0.0
+
+    dataset = build_delivered_order_classification_dataset(orders, items)
+    features, target = split_delivered_order_features_target(dataset)
+
+    assert dataset.columns.tolist() == DELIVERED_OUTPUT_COLUMNS
+    assert len(dataset) == len(orders)
+    assert set(dataset["late_delivery_flag"]) == {0.0, 1.0}
+    assert features.columns.tolist() == DELIVERED_MODEL_FEATURES
+    assert "late_delivery_flag" in features
+    assert "estimated_delivery_days" not in features
+    assert target.tolist().count(1) == 4
+
+
+def test_delivered_order_pipeline_and_inference_contract_work_end_to_end() -> None:
+    orders, items = make_inputs()
+    orders.loc[:5, "days_early"] = 2.0
+    orders.loc[:5, "late_delivery_flag"] = 0.0
+    dataset = build_delivered_order_classification_dataset(orders, items)
+    features, target = split_delivered_order_features_target(dataset)
+    pipeline = build_delivered_order_logistic_pipeline(random_state=42)
+    pipeline.fit(features, target)
+
+    artifact = {
+        "artifact_version": 1,
+        "model_scope": "all_delivered_orders",
+        "pipeline": pipeline,
+        "threshold": 0.5,
+        "model_features": DELIVERED_MODEL_FEATURES,
+    }
+    predictions = predict_from_delivered_order_artifact(artifact, features.iloc[:2])
 
     assert predictions.shape == (2, 2)
     assert predictions["negative_review_probability"].between(0, 1).all()
