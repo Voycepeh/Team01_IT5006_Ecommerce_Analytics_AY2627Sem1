@@ -1,15 +1,17 @@
-"""Construct the Phase 2 negative-review dataset for late deliveries.
+"""Construct Phase 2 negative-review datasets for delivered orders.
 
 This module consumes Phase 1 analytical CSV content, not the dashboard Parquet.
 It deliberately stops at deterministic, business-specific feature construction;
 learned preprocessing belongs in the fitted scikit-learn pipeline.
+
+The public contracts cover both the original late-order cohort and the broader
+all-delivered-order population without duplicating validation or aggregation.
 """
 
 from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-
 
 TARGET_COLUMN = "is_negative_review"
 IDENTIFIER_COLUMNS = ["order_id"]
@@ -40,6 +42,20 @@ CATEGORICAL_FEATURES = [
 ]
 MODEL_FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 OUTPUT_COLUMNS = IDENTIFIER_COLUMNS + MODEL_FEATURES + [TARGET_COLUMN]
+
+# The all-delivered model keeps the established contract except that lateness is
+# now a predictor rather than a cohort filter. estimated_delivery_days is
+# omitted because delivery_days + days_early encodes the same timing identity.
+DELIVERED_NUMERIC_FEATURES = [
+    feature for feature in NUMERIC_FEATURES if feature != "estimated_delivery_days"
+] + ["late_delivery_flag"]
+DELIVERED_CATEGORICAL_FEATURES = CATEGORICAL_FEATURES.copy()
+DELIVERED_MODEL_FEATURES = (
+    DELIVERED_NUMERIC_FEATURES + DELIVERED_CATEGORICAL_FEATURES
+)
+DELIVERED_OUTPUT_COLUMNS = (
+    IDENTIFIER_COLUMNS + DELIVERED_MODEL_FEATURES + [TARGET_COLUMN]
+)
 
 ORDER_REQUIRED_COLUMNS = {
     "order_id",
@@ -118,11 +134,13 @@ def _aggregate_item_features(item_level: pd.DataFrame) -> pd.DataFrame:
     return result
 
 
-def build_classification_dataset(
+def _build_classification_dataset(
     order_level: pd.DataFrame,
     item_level: pd.DataFrame,
+    *,
+    late_only: bool = True,
 ) -> pd.DataFrame:
-    """Build the model table for negative-review risk among late deliveries.
+    """Build a validated model table for the selected delivered-order scope.
 
     Required inputs
     ---------------
@@ -135,15 +153,16 @@ def build_classification_dataset(
 
     Prediction point and target
     ---------------------------
-    The prediction is made immediately after a late delivery reaches the
-    customer and before the customer submits a review. Eligible rows therefore
-    have ``order_status == 'delivered'``, a customer-delivery timestamp,
-    Phase 1 ``late_delivery_flag == 1`` and a deduplicated review score. Phase 1
+    The prediction is made immediately after delivery reaches the customer and
+    before the customer submits a review. Eligible rows have
+    ``order_status == 'delivered'``, a customer-delivery timestamp and a
+    deduplicated review score. The late-only scope additionally requires Phase 1
+    ``late_delivery_flag == 1``. Phase 1
     defines lateness as ``days_early < 0``: positive means early, zero means on
     the promised day and negative means late. ``days_early`` is retained
     unchanged as the candidate lateness-severity feature; no competing sign
     convention is introduced. The binary target is 1 for scores 1--2 and 0 for
-    scores 3--5. One output row represents one eligible late order.
+    scores 3--5. One output row represents one eligible delivered order.
 
     Leakage restrictions
     --------------------
@@ -155,10 +174,10 @@ def build_classification_dataset(
 
     Output schema
     -------------
-    Returns exactly ``order_id``, ``MODEL_FEATURES`` and
-    ``is_negative_review``, in ``OUTPUT_COLUMNS`` order. Learned imputation,
-    scaling and encoding are not performed here. Key uniqueness, source schema,
-    item coverage, review-score domain and target validity are checked in code.
+    Returns the explicit late-only or all-delivered output contract. Learned
+    imputation, scaling and encoding are not performed here. Key uniqueness,
+    source schema, item coverage, review-score domain and target validity are
+    checked in code.
     """
     _require_columns(order_level, ORDER_REQUIRED_COLUMNS, "order_level")
     _require_columns(item_level, ITEM_REQUIRED_COLUMNS, "item_level")
@@ -195,14 +214,18 @@ def build_classification_dataset(
     if malformed_delivery.any():
         raise ValueError("Unparseable timestamps in order_delivered_customer_date")
 
-    eligible = order_level.loc[
+    eligible_mask = (
         order_level["order_status"].eq("delivered")
         & delivered_at.notna()
-        & order_level["late_delivery_flag"].eq(1)
         & order_level["review_score"].notna()
-    ].copy()
+    )
+    if late_only:
+        eligible_mask &= order_level["late_delivery_flag"].eq(1)
+
+    eligible = order_level.loc[eligible_mask].copy()
     if eligible.empty:
-        raise ValueError("No late delivered orders with review scores are available")
+        scope = "late delivered" if late_only else "delivered"
+        raise ValueError(f"No {scope} orders with review scores are available")
 
     item_features = _aggregate_item_features(item_level)
     missing_item_orders = ~eligible["order_id"].isin(item_features["order_id"])
@@ -214,18 +237,41 @@ def build_classification_dataset(
     dataset = eligible.merge(item_features, on="order_id", how="left", validate="1:1")
     dataset[TARGET_COLUMN] = dataset["review_score"].le(2).astype("int8")
     dataset["same_state"] = dataset["same_state"].astype("boolean")
-    dataset = dataset[OUTPUT_COLUMNS].copy()
+    output_columns = OUTPUT_COLUMNS if late_only else DELIVERED_OUTPUT_COLUMNS
+    numeric_features = NUMERIC_FEATURES if late_only else DELIVERED_NUMERIC_FEATURES
+    dataset = dataset[output_columns].copy()
 
     _validate_unique(dataset, ["order_id"], "classification dataset")
     if not set(dataset[TARGET_COLUMN].unique()).issubset({0, 1}):
         raise AssertionError("Classification target must be binary")
     if dataset[TARGET_COLUMN].nunique() != 2:
         raise ValueError("Classification dataset must contain both target classes")
-    if not dataset["days_early"].lt(0).all():
+    if late_only and not dataset["days_early"].lt(0).all():
         raise AssertionError("Classification dataset must contain late deliveries only")
-    if np.isinf(dataset[NUMERIC_FEATURES].to_numpy(dtype=float)).any():
+    if np.isinf(dataset[numeric_features].to_numpy(dtype=float)).any():
         raise ValueError("Numeric model features contain infinite values")
     return dataset.reset_index(drop=True)
+
+
+def build_classification_dataset(
+    order_level: pd.DataFrame,
+    item_level: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build the original late-delivery negative-review model table."""
+    return _build_classification_dataset(order_level, item_level, late_only=True)
+
+
+def build_delivered_order_classification_dataset(
+    order_level: pd.DataFrame,
+    item_level: pd.DataFrame,
+) -> pd.DataFrame:
+    """Build negative-review data for all completed delivered orders.
+
+    The prediction is made immediately after customer delivery and before review
+    submission. Late, on-time and early orders are eligible. Review-side fields
+    define only the target and never enter the predictor contract.
+    """
+    return _build_classification_dataset(order_level, item_level, late_only=False)
 
 
 def split_features_target(
@@ -234,3 +280,18 @@ def split_features_target(
     """Return only the contracted model features and target."""
     _require_columns(dataset, set(OUTPUT_COLUMNS), "classification dataset")
     return dataset[MODEL_FEATURES].copy(), dataset[TARGET_COLUMN].copy()
+
+
+def split_delivered_order_features_target(
+    dataset: pd.DataFrame,
+) -> tuple[pd.DataFrame, pd.Series]:
+    """Return the all-delivered model's contracted predictors and target."""
+    _require_columns(
+        dataset,
+        set(DELIVERED_OUTPUT_COLUMNS),
+        "delivered-order classification dataset",
+    )
+    return (
+        dataset[DELIVERED_MODEL_FEATURES].copy(),
+        dataset[TARGET_COLUMN].copy(),
+    )
