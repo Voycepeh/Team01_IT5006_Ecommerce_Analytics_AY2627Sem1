@@ -47,7 +47,7 @@ That is the whole modelling story. The notebook deliberately avoids model tourna
 8. Fits the Logistic Regression model on the full training set.
 9. Evaluates it once on the test set using the standard 0.50 classification cutoff.
 10. Interprets the strongest positive and negative Logistic Regression coefficients.
-11. Saves preprocessing + Logistic Regression together as `deployment/negative_review_logistic_pipeline.pkl`.
+11. Saves preprocessing + Logistic Regression together as `deployment/late_order_negative_review_pipeline.pkl`.
 
 ## Why the Feature Selection Matters
 
@@ -88,7 +88,7 @@ A positive coefficient is associated with higher odds of a negative review, whil
 There is no need for a deployment flowchart. The handoff is simply:
 
 * The Phase 2 notebook trains and evaluates the model.
-* It saves **Preprocessor + Logistic Regression in one `.pkl` file** at `deployment/negative_review_logistic_pipeline.pkl`.
+* It saves **Preprocessor + Logistic Regression in one `.pkl` file** at `deployment/late_order_negative_review_pipeline.pkl`.
 * Phase 3 FastAPI loads that approved file.
 * `POST /predict` validates the required order features, runs the saved Pipeline and returns the negative-review probability and predicted class.
 * FastAPI serves the trained model. It does not retrain or tune it.
