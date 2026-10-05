@@ -116,8 +116,13 @@ def _save_inference_artifact(
     prediction_point: str,
     metadata: dict[str, Any] | None,
     model_scope: str | None = None,
+    compress: int = 0,
 ) -> None:
-    """Persist one fitted pipeline with its explicit inference contract."""
+    """Persist one fitted pipeline with its explicit inference contract.
+
+    ``compress`` (0-9) is passed to joblib; large tree ensembles use it to stay
+    small enough for GitHub. ``joblib.load`` reads either form unchanged.
+    """
     if not 0 <= threshold <= 1:
         raise ValueError("threshold must be between 0 and 1")
     if not hasattr(fitted_pipeline, "classes_"):
@@ -132,7 +137,7 @@ def _save_inference_artifact(
     }
     if model_scope is not None:
         artifact["model_scope"] = model_scope
-    joblib.dump(artifact, path)
+    joblib.dump(artifact, path, compress=compress)
 
 
 def predict_from_artifact(artifact: dict[str, Any], records: pd.DataFrame) -> pd.DataFrame:
@@ -172,6 +177,7 @@ def save_delivered_order_inference_artifact(
     *,
     threshold: float,
     metadata: dict[str, Any] | None = None,
+    compress: int = 0,
 ) -> None:
     """Save the fitted all-delivered pipeline and its inference contract."""
     _save_inference_artifact(
@@ -182,6 +188,7 @@ def save_delivered_order_inference_artifact(
         prediction_point=DELIVERED_ORDER_PREDICTION_POINT,
         metadata=metadata,
         model_scope="all_delivered_orders",
+        compress=compress,
     )
 
 

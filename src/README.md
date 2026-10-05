@@ -20,6 +20,9 @@ Use this folder for reusable project code that supports data preparation, analys
   and the distinct versioned inference artifact interfaces.
 - `classification_evaluation.py` owns imbalance-aware metrics and training-only threshold
   comparison helpers.
+- `classification_tree_model.py` owns the second model family (Decision Tree / Random
+  Forest) for the all-delivered problem. Its pipelines reuse the delivered-order feature
+  contract and are saved with the same artifact interface as Logistic Regression.
 
 See [`docs/phase2-late-order-classification-workflow.md`](../docs/phase2-late-order-classification-workflow.md)
 for the original late-order workflow and
