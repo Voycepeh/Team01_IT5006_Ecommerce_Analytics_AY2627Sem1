@@ -8,6 +8,7 @@ This is an assessed IT5006 team project. AI agents are helpers, not owners of th
 2. Read `docs/project-requirements.md` before making scope, deadline or deliverable decisions.
 3. Use the official course page as the final authority when accessible:
    https://prakashsukhwal.github.io/IT5006/IT5006_Project_Description_2026Aug_V2.html#project-timeline-deliverables
+4. When continuing the Phase 2 classification work, read `PHASE2_HANDOFF.md` for the current status, agreed decisions and next steps.
 
 ## Keep the lecturer-required structure
 
