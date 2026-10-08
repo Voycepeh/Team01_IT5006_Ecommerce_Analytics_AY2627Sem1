@@ -14,10 +14,10 @@
 | Item | Status |
 |---|---|
 | Branch | `feature/delivered-order-random-forest`, pushed to GitHub. **Not merged** into `main`. |
-| Commits | `89bd62b` (Random Forest family, tests, `.pkl`, `PHASE2_TREE_MODEL.md`), `386eeab` (comparison notebook, Word report draft), then the commit adding this handoff file and the citation fix. Run `git log --oneline` for the latest. |
+| Commits | `89bd62b` (Random Forest family, tests, `.pkl`, `PHASE2_TREE_MODEL.md`), `386eeab` (comparison notebook, Word report draft), `722c956` (this handoff file, citation fix), then the **two-stage design** changes of 8 Oct (if committed). Run `git log --oneline` for the latest. |
 | Pull request | Create/open it from https://github.com/Voycepeh/Team01_IT5006_Ecommerce_Analytics_AY2627Sem1/pull/new/feature/delivered-order-random-forest. A draft description was given in an earlier session; it follows `.github/pull_request_template.md`. |
-| Main notebook | `notebooks/phase2_delivered_order_classification_combined.ipynb`: run end to end (about 10 minutes, no errors), and all findings text verified against its outputs |
-| Report draft | `docs/Phase2_Classification_Report_Sections.docx` (7 pages, AI-assisted, needs team review) |
+| Main notebook | `notebooks/phase2_delivered_order_classification_combined.ipynb`: **two-stage design**, 15 steps, run end to end (about 15 minutes, no errors), and all findings text written from its outputs |
+| Report draft | `docs/Phase2_Classification_Report_Sections.docx` (AI-assisted, needs team review); updated for the two-stage design |
 | Tree-model write-up | `PHASE2_TREE_MODEL.md` (file-by-file changes, results of the earlier random-split notebook) |
 | Phase 1 report PDF | `Team1_Phase1_IT5006_AY2627Sem1.pdf` sits in the user's local folder and is **deliberately not committed**: the repo is **public** and the PDF lists teammates' names and NUS matriculation numbers. Key facts from it are copied in section 6 below. |
 
@@ -35,9 +35,9 @@
 
 ## 3. Decisions already agreed with the user (do not re-litigate)
 
-1. **Problem:** predict a negative review (1–2 stars) for **all delivered orders**, right after delivery. This is not the late-orders-only version.
+1. **Problem: two-stage design (agreed 8 Oct 2026).** Predict which customers will leave a negative review (1–2 stars) early enough to contact them before they write it. **Stage 1**, at the promised delivery date: a rule contacts every order that has not arrived (late). **Stage 2**, at delivery: the models rank every customer who has **not reviewed yet**, and the riskiest 10% are contacted. Orders reviewed before delivery (4,653) are left out of Stage 2, because the review already exists at its prediction point and their delivery inputs come from after the review. Present it as **one problem with two decision points** (brief: 1–2 problems max).
 2. **Models:** **R** = rule benchmark (rank by lateness: `-days_early`; flag = `late_delivery_flag`); **A** = plain Logistic Regression (`C=np.inf`, no class weighting); **B** = tuned Logistic Regression; **C** = single Decision Tree; **D** = Random Forest, no tuning (200 trees); **E** = tuned Random Forest. **The final comparison is B vs E.**
-3. **Validation is time-based:** sort by purchase date; train on the earliest 80% (up to 2018-05-27) and test on the latest 20%; `TimeSeriesSplit(n_splits=5)` for CV and tuning. The random stratified split appears only as a comparison (step 12).
+3. **Validation is time-based:** sort by purchase date; train on the earliest 80% of Stage 2 orders (up to 2018-05-31) and test on the latest 20%; `TimeSeriesSplit(n_splits=5)` for CV and tuning. The random stratified split appears only as a comparison (step 12).
 4. **The deciding metric is top-10% precision** (Phase 1's "precision among top-ranked orders"). It is used for `GridSearchCV(refit=...)` and for model selection. F1, PR-AUC, AUC-ROC and balanced accuracy are still reported.
 5. **"Worth it" rule:** a more complex option must have a higher average top-10% precision **and** win in at least 4 of the 5 time-ordered folds.
 6. **No regression metrics** (MAE, RMSE, R²) in the classification work. The user had them removed: they belong to regression. Section 7 of the report states "not applicable".
@@ -45,31 +45,40 @@
 8. **No ensemble/stacking.** The Random Forest is itself a bagging ensemble.
 9. **Seeds:** `random_state=42` everywhere. The notebook **does not write `.pkl` files**.
 
-## 4. Current results (time-based, test = later orders)
+## 4. Current results (two-stage design, time-based, test = later orders)
 
-| Model | CV top-10% precision | Test top-10% precision | Unhappy customers in the 1,916-order top-10% list |
-|---|---|---|---|
-| R. Rule | 0.501 | 0.205 | 392 |
-| A. Plain LR | 0.541 | 0.325 | 622 |
-| B. Tuned LR (`C=0.001`, no class weighting) | 0.551 | 0.327 | 627 |
-| C. Single tree | 0.305 | 0.202 | 387 |
-| D. RF, no tuning | 0.550 | 0.331 | 634 |
-| **E. Tuned RF** (no depth limit, `min_samples_leaf=10`, no class weighting) | **0.561** | **0.333** | **638** |
+**Stage 2 models** (91,171 orders; train 72,936 = 3 Oct 2016–31 May 2018; test 18,235 = 31 May–29 Aug 2018, 8.5% negative):
 
-* **Final choice: E, by a small margin.** All four main models beat the rule by about 60%. A random split would have flattered every model (about 0.55).
-* **Error analysis:** the list = every late order plus mostly multi-item orders. 1,215 of the 1,216 missed negatives are on on-time or early orders.
-* **Known leakage issue:** 4,653 orders (4.9%) were reviewed **before** delivery, i.e. 70.1% of late orders. 78.3% of those reviews are negative, and they make up 29.7% of all negatives.
+| Model | CV top-10% precision | Test top-10% precision | Unhappy customers in the 1,824-order top-10% list | Test AUC-ROC |
+|---|---|---|---|---|
+| R. Rule | 0.145 | 0.084 | 153 | 0.484 |
+| A. Plain LR | 0.239 | 0.211 | 385 | 0.642 |
+| B. Tuned LR (`C=0.001`, `class_weight="balanced"`) | 0.267 | **0.229** | **418** | **0.647** |
+| C. Single tree | 0.145 | 0.140 | 256 | 0.537 |
+| D. RF, no tuning | 0.251 | 0.228 | 416 | 0.638 |
+| **E. Tuned RF** (`max_depth=12`, `min_samples_leaf=25`, no class weighting) | **0.275** | 0.226 | 413 | 0.635 |
+
+* **Selection: E by the pre-set CV rule (wins all 5 folds vs B), but B, D and E are tied on later orders** (5 customers apart; B marginally ahead). **Team decision needed:** keep E or prefer the simpler B (notebook step 13).
+* **The rule is no better than random in Stage 2** (8.4% vs 8.5%). Models are about 2.7× random.
+* **Both families rely on order size first** (`item_count`, `seller_count`), then `delivery_days`. Lateness barely matters in Stage 2 (Stage 1 handles it).
+* **Error analysis:** the Stage 2 list is essentially multi-item orders (90% of 2+-item orders listed; their negative rate 22.7% ≈ list precision 22.6%). 1,107 of the 1,130 missed negatives are single-item orders.
+* **Stage 1** (whole data): 6,381 late orders, 62.4% negative, 32.5% of all negatives; 44 reviewed before the promised day ended. **Test period:** 657 late orders, 46.9% precision, 17.1% of negatives.
+* **Whole system on the test period (step 14):** 2,355 contacts reach 693 of 1,806 negatives (38.4%), 29.4% precision, about 26 contacts a day.
+* **Random split** flatters only a little now (0.244–0.262 vs 0.211–0.229) but would put E ahead of B, the reverse of later orders.
+* **Leakage sensitivity (side check, not in the notebook):** with the pre-delivery reviewers kept, test top-10% precision was 0.333 (E) / 0.327 (B); 262 of E's 638 hits had already reviewed before delivery.
 
 ## 5. Next steps (in priority order)
 
-1. **Feature-by-feature rationale with citations** (professor's main feedback point). Add a "why each input" table to the notebook and to section 3 of the Word doc, using section 6 below. **This was the agreed next task.**
-2. **Leakage fix: a team decision is needed.** (a) drop orders reviewed before delivery, *recommended*; (b) move the prediction point to the promised delivery date; or (c) disclose it as a limitation. Then re-run the notebook and refresh all findings. Per Kapoor & Narayanan (2023), the RF's lead over LR may shrink.
+*Done 8 Oct 2026:* leakage fix via the two-stage design (old item 2); ROC and precision-recall curves (notebook step 8.1); 📌 quotes from the IT5006 brief and the T08 tutorial under each method choice (journal papers are paraphrased, never quoted, because their wording could not be checked).
+
+1. **Final Stage 2 model: team decision** (step 13): keep E (pre-set CV rule) or choose B (tied on test, simpler). State the tie in the report either way.
+2. **Feature-by-feature rationale with citations** (professor's main feedback point). Add a "why each input" table to the notebook and to section 3 of the Word doc, using section 6 below. Note the new finding: order size matters most in Stage 2.
 3. **Calibration check** (the Phase 1 review recommends reporting calibration with discrimination): a reliability curve for B and E. This is a classification check, not a regression metric.
-4. **Smaller alignments, not yet approved by the user:** rename the stakeholder to "customer service" (Phase 1 wording); restrict to Phase 1's Jan 2017–Aug 2018 window (it currently includes 264 orders from 2016); justify one-hot vs target encoding (Micci-Barreca 2001; Pargent et al. 2022).
+4. **Smaller alignments, not yet approved by the user:** rename the stakeholder to "customer service" (Phase 1 wording); restrict to Phase 1's Jan 2017–Aug 2018 window (Stage 2 includes 259 orders from 2016); justify one-hot vs target encoding (Micci-Barreca 2001; Pargent et al. 2022); drop `purchase_month` (adds nothing).
 5. **Citation check:** the temporal-leakage point is currently credited to "our Phase 1 literature review". Kapoor & Narayanan (2023) is likely the right source (their leakage taxonomy includes temporal leakage), so **verify that before citing it**.
-6. After the decisions: **retrain and re-save the final model** to `deployment/` for Phase 3, and update `PHASE2_TREE_MODEL.md`.
-7. Optional: a `RUN_TUNING` switch to skip grid searches on re-runs; add `min_samples_leaf=5` to the RF grid (the best value is at the grid edge).
-8. **Team sign-off needed** on the success criteria and the "worth it" rule, and **declare AI assistance** in the report.
+6. After the decisions: **retrain and re-save the final Stage 2 model** to `deployment/` for Phase 3, and update `PHASE2_TREE_MODEL.md` (still describes the earlier random-split work).
+7. Optional: a `RUN_TUNING` switch to skip grid searches on re-runs (the notebook now takes about 15 minutes).
+8. **Team sign-off needed** on the two-stage framing, the success criteria and the "worth it" rule, and **declare AI assistance** in the report.
 
 ## 6. Phase 1 report: facts and references to reuse
 
@@ -101,9 +110,9 @@
 
 ## 7. Environment notes (Windows laptop)
 
-* **scikit-learn:** Windows Smart App Control blocks the 1.9.1 binaries, so use `pip install scikit-learn==1.9.0` (same 1.9 line as the team's `.pkl`). 1.7.x fails with pandas 3 string columns.
-* **Re-run the notebook:** `python -m nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1800 notebooks/phase2_delivered_order_classification_combined.ipynb`. It takes about 10 minutes. **Keep the laptop awake**: sleep stalls the run.
-* **Tests:** `python -m pytest -q tests/test_classification_tree_model.py tests/test_classification_foundation.py` (9 pass).
+* **scikit-learn:** on the first laptop, Windows Smart App Control blocked the 1.9.1 binaries, so `pip install scikit-learn==1.9.0` was used there (same 1.9 line as the team's `.pkl`). On the second device (`D:\IT5006 Projet`, project `.venv` with Python 3.13) 1.9.1 works. 1.7.x fails with pandas 3 string columns.
+* **Re-run the notebook:** `python -m nbconvert --to notebook --execute --inplace --ExecutePreprocessor.timeout=1800 notebooks/phase2_delivered_order_classification_combined.ipynb` (needs `pip install nbconvert`, a tool only, not in `requirements.txt`). It takes about 15 minutes. **Keep the laptop awake**: sleep stalls the run.
+* **Tests:** `python -m pytest -q` (17 pass, including the dashboard tests).
 * **Dates** in `order_level.csv` have mixed formats, so use `pd.to_datetime(..., format="mixed")`.
 * **Documents:** no pandoc or LibreOffice. Microsoft Word is installed (its COM automation can export docx to PDF) and PyMuPDF is installed (for reading PDFs and rendering pages).
 * The `gh` CLI is not installed, so PRs are opened in the browser.
