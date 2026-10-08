@@ -23,7 +23,7 @@ jobs:
       - name: Verify committed processed inputs
         run: |
           ls -lh data/processed/order_level.csv data/processed/item_level.csv
-      - name: Run Phase 2 classification analysis
+      - name: Compare three class balance approaches\n        run: |\n          python -m pip install tabulate\n          python scripts/compare_phase2_class_balance.py\n      - name: Run Phase 2 classification analysis
         run: |
           mkdir -p reports/phase2
           jupyter nbconvert --to notebook --execute notebooks/phase2_delivered_order_classification_simplified.ipynb --output phase2_threshold_executed.ipynb --output-dir reports/phase2 --ExecutePreprocessor.timeout=2400
