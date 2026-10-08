@@ -1,0 +1,40 @@
+name: Phase 2 threshold analysis
+
+on:
+  push:
+    branches:
+      - analysis/phase2-threshold-validation
+  workflow_dispatch:
+
+jobs:
+  evaluate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: pip
+      - name: Install project and notebook execution dependencies
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install nbconvert nbformat
+      - name: Verify committed processed inputs
+        run: |
+          ls -lh data/processed/order_level.csv data/processed/item_level.csv
+      - name: Compare three class balance approaches
+        run: |
+          python -m pip install tabulate
+          python scripts/compare_phase2_class_balance.py
+      - name: Run Phase 2 classification analysis
+        run: |
+          mkdir -p reports/phase2
+          jupyter nbconvert --to notebook --execute notebooks/phase2_delivered_order_classification_simplified.ipynb --output phase2_threshold_executed.ipynb --output-dir reports/phase2 --ExecutePreprocessor.timeout=2400
+      - name: Upload executed analysis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: phase2-threshold-analysis
+          path: reports/phase2/
+          if-no-files-found: warn
