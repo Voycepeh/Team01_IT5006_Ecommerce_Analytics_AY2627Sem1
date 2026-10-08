@@ -20,7 +20,7 @@ We separate earlier and later orders using an **80% chronological training / 20%
 
 We selected **tuned Random Forest during training cross-validation**, according to the pre-established PR AUC selection rule. On later held-out orders, however, the two tuned models have nearly identical ranking performance. We therefore **favour tuned Logistic Regression as a practical candidate** because it is simpler to interpret and implement. This is a pragmatic preference, not a retrospective change to our cross-validation selection criterion.
 
-The 0.50 threshold detects very few negative reviews for either model. We do not choose a more favourable threshold using the held-out test set; a practical intervention threshold would require separate validation.
+The 0.50 threshold detects very few negative reviews for either model. The notebook now includes a **training-only forward-chaining out-of-fold threshold analysis** for both tuned finalists. It plots precision, recall and F1 across candidate thresholds, selects an illustrative operating point that maximises recall subject to at least 20% out-of-fold precision (falling back explicitly to best F1 if infeasible), and compares that frozen cutoff with 0.50 on the held-out period. The 20% precision floor is an analytical scenario, not an agreed stakeholder requirement. No threshold is selected using held-out outcomes. Threshold changes do not change PR AUC or ROC AUC. The notebook must be executed on the local Olist dataset to obtain numerical results.
 
 ## Boundaries and reproducibility
 
