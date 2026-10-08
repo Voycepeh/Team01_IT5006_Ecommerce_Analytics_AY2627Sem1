@@ -41,7 +41,7 @@ Balanced weights detected **380** negative reviews with **1,325** false alarms, 
 
 These figures are a **separate Logistic Regression sensitivity experiment**, not a direct replacement for the earlier five-fold time-series cross-validation model comparison. The validation design and model-selection procedures differ, so their numbers should not be interpreted as directly interchangeable.
 
-Reproducible source: [three-approach experiment script](../scripts/compare_phase2_class_balance.py). Recorded results: [CSV](../reports/phase2/three_approaches.csv) and [Markdown table](../reports/phase2/three_approaches.md). The executed notebook is available as a GitHub Actions artifact.
+Reproducible source: [three-approach experiment script](../scripts/compare_phase2_class_balance.py). Recorded results: [CSV](../reports/phase2/three_approaches.csv). The executed notebook is available as a GitHub Actions artifact.
 
 ## Boundaries and reproducibility
 
