@@ -1,53 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 560" role="img" aria-labelledby="phase2-title phase2-desc">
-<title id="phase2-title">Phase 2 classification workflow</title>
-<desc id="phase2-desc">Phase 1 processed order and item tables feed eligibility filtering and feature engineering. A chronological split feeds model comparison using Logistic Regression and tree models. Training cross-validation selects Random Forest, then held-out evaluation shows near-equivalent ranking and Logistic Regression is preferred for practical simplicity.</desc>
-<defs><marker id="phase2-arrow" markerWidth="8" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7Z" fill="#4f5d75"/></marker><marker id="phase2-accent-arrow" markerWidth="8" markerHeight="7" refX="7" refY="3.5" orient="auto"><path d="M0 0 L7 3.5 L0 7Z" fill="#eb6c36"/></marker></defs>
-<rect width="1040" height="560" fill="#f5f5f5"/>
-<g font-family="Arial, Helvetica, sans-serif">
-<text x="28" y="38" font-size="12" font-weight="700" letter-spacing="2" fill="#4f5d75">IT5006  /  PHASE 2</text>
-<text x="28" y="73" font-size="29" font-weight="700" fill="#2d3142">Predicting negative customer reviews</text>
-<text x="28" y="97" font-size="14" fill="#4f5d75">One classification task · two model families · held-out future orders</text>
-<path d="M232 178 H256 M470 178 H494" stroke="#4f5d75" stroke-width="2" fill="none" marker-end="url(#phase2-arrow)"/>
-<path d="M708 178 H740 V204 H760" stroke="#4f5d75" stroke-width="2" fill="none" marker-end="url(#phase2-arrow)"/>
-<path d="M868 249 V271 H760" stroke="#4f5d75" stroke-width="2" fill="none" marker-end="url(#phase2-arrow)"/>
-<path d="M868 249 V271 H980" stroke="#4f5d75" stroke-width="2" fill="none" marker-end="url(#phase2-arrow)"/>
-<path d="M760 345 V373 H868 V398" stroke="#4f5d75" stroke-width="2" fill="none" marker-end="url(#phase2-arrow)"/>
-<path d="M980 345 V373 H868" stroke="#4f5d75" stroke-width="2" fill="none"/>
-<path d="M868 470 V489 H528 V506" stroke="#eb6c36" stroke-width="2.2" fill="none" marker-end="url(#phase2-accent-arrow)"/>
-<rect x="28" y="130" width="204" height="96" rx="7" fill="#fff" stroke="#bfc0c0"/>
-<text x="44" y="150" font-size="10" letter-spacing="1.2" fill="#4f5d75">INPUT</text>
-<text x="44" y="176" font-size="17" font-weight="700" fill="#2d3142">Phase 1 data</text>
-<text x="44" y="195" font-size="12" fill="#4f5d75">Order + item tables</text>
-<text x="44" y="211" font-size="11" fill="#7a8399">Known reviews only</text>
-<rect x="256" y="130" width="214" height="96" rx="7" fill="#fff" stroke="#bfc0c0"/>
-<text x="272" y="150" font-size="10" letter-spacing="1.2" fill="#4f5d75">PREPARE</text>
-<text x="272" y="176" font-size="17" font-weight="700" fill="#2d3142">Eligibility + features</text>
-<text x="272" y="195" font-size="12" fill="#4f5d75">Exclude reviews before delivery</text>
-<text x="272" y="211" font-size="11" fill="#7a8399">21 candidate predictors</text>
-<rect x="494" y="130" width="214" height="96" rx="7" fill="#fff" stroke="#bfc0c0"/>
-<text x="510" y="150" font-size="10" letter-spacing="1.2" fill="#4f5d75">VALIDATE</text>
-<text x="510" y="176" font-size="17" font-weight="700" fill="#2d3142">Chronological split</text>
-<text x="510" y="195" font-size="12" fill="#4f5d75">80% train · 20% test</text>
-<text x="510" y="211" font-size="11" fill="#7a8399">Five time-ordered CV folds</text>
-<rect x="760" y="130" width="220" height="119" rx="7" fill="#fff" stroke="#bfc0c0"/>
-<text x="776" y="150" font-size="10" letter-spacing="1.2" fill="#4f5d75">COMPARE &amp; TUNE</text>
-<text x="776" y="175" font-size="16" font-weight="700" fill="#2d3142">Two model families</text>
-<text x="776" y="196" font-size="12" fill="#4f5d75">Select by training CV PR AUC</text>
-<text x="776" y="218" font-size="11" fill="#7a8399">No test-set tuning</text>
-<rect x="658" y="271" width="210" height="74" rx="7" fill="#fff" stroke="#bfc0c0"/>
-<text x="674" y="294" font-size="15" font-weight="700" fill="#2d3142">Logistic Regression</text>
-<text x="674" y="314" font-size="11" fill="#4f5d75">Plain + tuned</text>
-<text x="674" y="330" font-size="11" fill="#7a8399">Linear family</text>
-<rect x="882" y="271" width="130" height="74" rx="7" fill="#fff" stroke="#bfc0c0"/>
-<text x="895" y="294" font-size="14" font-weight="700" fill="#2d3142">Tree family</text>
-<text x="895" y="313" font-size="11" fill="#4f5d75">Decision Tree</text>
-<text x="895" y="330" font-size="11" fill="#7a8399">Random Forest</text>
-<rect x="694" y="398" width="318" height="72" rx="7" fill="#fff" stroke="#eb6c36" stroke-width="2"/>
-<text x="710" y="419" font-size="10" letter-spacing="1.1" fill="#eb6c36">HELD-OUT EVALUATION</text>
-<text x="710" y="441" font-size="16" font-weight="700" fill="#2d3142">Near-identical ranking</text>
-<text x="710" y="458" font-size="12" fill="#4f5d75">PR AUC 0.187 LR · 0.188 RF</text>
-<rect x="238" y="500" width="432" height="48" rx="7" fill="#fff" stroke="#eb6c36" stroke-width="1.8"/>
-<text x="255" y="520" font-size="15" font-weight="700" fill="#2d3142">Prefer tuned Logistic Regression</text>
-<text x="255" y="538" font-size="11" fill="#4f5d75">Practical simplicity; Random Forest remains CV winner</text>
-<text x="28" y="540" font-size="10" fill="#7a8399">Threshold 0.50 is diagnostic only.</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1140 650" role="img" aria-labelledby="title desc"><title id="title">Phase 2 negative review classification workflow</title><desc id="desc">Data preparation, chronological split, cross-validation, validation-based Logistic Regression selection, out-of-fold threshold selection and final held-out testing. Random Forest has higher test recall but lower precision and more false alarms.</desc><defs><marker id="arr" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8Z" fill="#4f5d75"/></marker><marker id="highlight" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0 L8 4 L0 8Z" fill="#bf4520"/></marker></defs><rect width="1140" height="650" fill="#f5f5f5"/><g font-family="Arial, Helvetica, sans-serif"><text x="32" y="36" font-size="12" font-weight="700" fill="#4f5d75">IT5006  /  PHASE 2</text><text x="32" y="77" font-size="30" font-weight="700" fill="#2d3142">Predicting negative customer reviews</text><text x="32" y="105" font-size="15" font-weight="400" fill="#4f5d75">Validation chooses the model and threshold. The held-out test measures performance.</text>
+<path d="M292 204 H320" fill="none" stroke="#4f5d75" stroke-width="2" marker-end="url(#arr)"/><path d="M568 204 H596" fill="none" stroke="#4f5d75" stroke-width="2" marker-end="url(#arr)"/><path d="M844 204 H872" fill="none" stroke="#4f5d75" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="32" y="142" width="260" height="124" rx="8" fill="#fff" stroke="#bfc0c0" stroke-width="1.3"/><text x="50" y="167" font-size="11" font-weight="700" fill="#4f5d75">01  PREPARE</text><text x="50" y="195" font-size="19" font-weight="700" fill="#2d3142">Delivered orders</text><text x="50" y="218" font-size="13" font-weight="400" fill="#4f5d75">Known reviews; exclude early reviews</text><text x="50" y="237" font-size="13" font-weight="400" fill="#4f5d75">21 candidate predictors</text>
+<rect x="320" y="142" width="248" height="124" rx="8" fill="#fff" stroke="#bfc0c0" stroke-width="1.3"/><text x="338" y="167" font-size="11" font-weight="700" fill="#4f5d75">02  SPLIT</text><text x="338" y="195" font-size="19" font-weight="700" fill="#2d3142">Chronological</text><text x="338" y="218" font-size="13" font-weight="400" fill="#4f5d75">80% development data</text><text x="338" y="237" font-size="13" font-weight="400" fill="#4f5d75">20% held-out test</text>
+<rect x="596" y="142" width="248" height="124" rx="8" fill="#fff" stroke="#bfc0c0" stroke-width="1.3"/><text x="614" y="167" font-size="11" font-weight="700" fill="#4f5d75">03  TRAIN &amp; VALIDATE</text><text x="614" y="195" font-size="19" font-weight="700" fill="#2d3142">Five CV folds</text><text x="614" y="218" font-size="13" font-weight="400" fill="#4f5d75">Logistic Regression + tree family</text><text x="614" y="237" font-size="13" font-weight="400" fill="#4f5d75">Tune LR and Random Forest</text>
+<rect x="872" y="142" width="236" height="124" rx="8" fill="#fff" stroke="#bf4520" stroke-width="2"/><text x="890" y="167" font-size="11" font-weight="700" fill="#bf4520">04  SELECT MODEL</text><text x="890" y="195" font-size="19" font-weight="700" fill="#2d3142">Logistic Regression</text><text x="890" y="218" font-size="13" font-weight="400" fill="#4f5d75">RF 0.229 vs LR 0.218 PR AUC</text><text x="890" y="237" font-size="13" font-weight="400" fill="#4f5d75">One-standard-error rule</text>
+<path d="M990 266 V305 H715 V336" fill="none" stroke="#4f5d75" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="462" y="336" width="506" height="124" rx="8" fill="#fff" stroke="#bf4520" stroke-width="2"/><text x="480" y="361" font-size="11" font-weight="700" fill="#bf4520">05  SELECT THRESHOLD</text><text x="480" y="389" font-size="19" font-weight="700" fill="#2d3142">0.12 from validation probabilities</text><text x="480" y="412" font-size="13" font-weight="400" fill="#4f5d75">Out-of-fold predictions, not test data</text><text x="480" y="431" font-size="13" font-weight="400" fill="#4f5d75">Maximise recall with ≥20% precision (illustrative)</text>
+<path d="M715 460 V502" fill="none" stroke="#4f5d75" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="32" y="502" width="1076" height="119" rx="8" fill="#fff" stroke="#bfc0c0" stroke-width="1.3"/><text x="50" y="527" font-size="11" font-weight="700" fill="#4f5d75">06  FINAL HELD-OUT TEST</text><text x="50" y="555" font-size="19" font-weight="700" fill="#2d3142">Compare frozen models at 0.12</text><text x="50" y="578" font-size="13" font-weight="400" fill="#4f5d75">Logistic Regression   PR AUC 0.187  |  Precision 24.8%  |  Recall 22.2%  |  343 detected  |  1,042 false alarms</text><text x="50" y="597" font-size="13" font-weight="400" fill="#4f5d75">Random Forest             PR AUC 0.188  |  Precision 18.6%  |  Recall 34.0%  |  525 detected  |  2,297 false alarms</text>
 </g></svg>
