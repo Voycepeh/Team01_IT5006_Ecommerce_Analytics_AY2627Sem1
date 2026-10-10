@@ -1,58 +1,65 @@
-# Phase 2 classification workflow
+# Phase 2: Negative review classification workflow
 
-We investigate whether a delivered order will receive a negative customer review (1–2 stars). We make the prediction immediately after delivery, before the review is submitted.
+**Question:** Can we identify delivered orders likely to receive a negative review (1–2 stars) **after delivery and before review submission**?
+
+We analyse historical Olist orders to support potential follow-up by customer experience and seller quality teams. The [final classification notebook](../notebooks/phase2_delivered_order_classification_final.ipynb) contains the implementation, saved figures and detailed results.
 
 ![High-level Phase 2 classification workflow](assets/phase2-classification-workflow.svg)
 
-## How we approach the problem
+## Method at a glance
 
-We start with the processed order and item tables from Phase 1. We build one row per order, filter out orders reviewed before delivery and prepare **21 candidate predictors** covering delivery performance, order value, order complexity, product characteristics, geography and purchase timing.
+| Stage | Our approach |
+|---|---|
+| Population and target | One row per delivered order with a known review; exclude orders reviewed before delivery. Target: 1–2 stars = negative, 3–5 stars = non-negative. |
+| Features | 21 candidate predictors from delivery performance, order/payment value, order and seller complexity, product characteristics, geography and purchase timing. |
+| Splitting | Earlier 80% of purchases for training and validation; newest 20% held out for final testing. Five forward-chaining validation folds within training. |
+| Models | Logistic Regression, Decision Tree and Random Forest: **two model families**, starting with simple baselines. |
+| Evaluation | Average precision (reported as PR AUC) is primary because negative reviews are uncommon. We also examine ROC AUC, threshold-based precision/recall/F1 and overfitting. |
+| Selection | Tune Logistic Regression and Random Forest using training-only CV; apply the **one-standard-error rule** to prefer a simpler model when its validation PR AUC is close to the best. |
+| Decision threshold | Choose on out-of-fold validation predictions, **before** testing: maximise recall while maintaining at least 20% precision in an illustrative contact scenario. |
+| Final check | Evaluate the frozen model and cutoff once on later held-out orders, then interpret errors, predictive signals and limitations. |
 
-We separate earlier and later orders using an **80% chronological training / 20% test split**, then compare two model families: Logistic Regression and tree-based models (Decision Tree and Random Forest). We evaluate simple baselines before tuning. The five-fold time-series cross-validation runs **inside the training period** and scores models using **PR AUC (average precision)** because negative reviews are the minority class. We choose between models with the **one-standard-error rule**: the simplest model whose cross-validation PR AUC is within one standard error of the best (Hastie, Tibshirani & Friedman, 2009, *The Elements of Statistical Learning*, section 7.10).
+**Prediction timing matters.** Delivery duration and lateness can be used because the prediction happens after delivery. Review scores, text and timestamps are not predictors; timestamps only help establish historical eligibility. The split uses purchase time, which is not a complete reconstruction of when every label became available.
 
-## What we found
+## Main results
 
-| Held-out metric | Tuned Logistic Regression | Tuned Random Forest |
+| Metric | Tuned Logistic Regression | Tuned Random Forest |
 |---|---:|---:|
-| Cross-validation PR AUC | 0.218 | 0.229 |
-| Training PR AUC (overfitting check) | 0.193 | 0.334 |
-| Held-out PR AUC | 0.187 | 0.188 |
-| Held-out ROC AUC | 0.649 | 0.645 |
-| Recall at threshold 0.50 | 2.3% | 0.1% |
+| Validation PR AUC | 0.218 | **0.229** |
+| Training PR AUC | 0.193 | 0.334 |
+| Held-out test PR AUC | 0.187 | 0.188 |
+| Held-out test ROC AUC | **0.649** | 0.645 |
+| Selected validation cutoff | 0.12 | 0.12 |
+| Test precision at 0.12 | **24.8%** | 18.6% |
+| Test recall at 0.12 | 22.2% | **34.0%** |
+| Test false alarms at 0.12 | **1,042** | 2,297 |
 
-We **select tuned Logistic Regression**. Tuned Random Forest had the highest cross-validation PR AUC (0.229), but tuned Logistic Regression (0.218) was within one standard error (0.020) of it, so the one-standard-error rule chooses the simpler model. The held-out results support this choice: the two models rank later orders almost identically, and the Random Forest overfits more (training PR AUC 0.334 vs validation 0.229, against 0.193 vs 0.218 for Logistic Regression). An earlier version of this workflow selected the highest cross-validation score outright and recommended Logistic Regression only as a practical preference; the one-standard-error rule makes the selection and the recommendation consistent.
+**Why Logistic Regression?** Its validation PR AUC is within one standard error (**0.020**) of the forest's best score. Under our stated one-standard-error rule, the forest's small gain does not justify additional complexity. Logistic Regression also shows a smaller training–validation gap. On the held-out test period, the two models' ranking results are nearly identical.
 
-The 0.50 threshold detects very few negative reviews for either model. The notebook includes an **executed training-only forward-chaining out-of-fold threshold analysis** for both tuned finalists. It plots precision, recall and F1 across candidate thresholds, selects an illustrative operating point that maximises recall subject to at least 20% out-of-fold precision (falling back explicitly to best F1 if infeasible), and compares that frozen cutoff with 0.50 on the held-out period. The 20% precision floor is an analytical scenario, not an agreed stakeholder requirement. No threshold is selected using held-out outcomes. Threshold changes do not change PR AUC or ROC AUC. The threshold analysis has been executed using the committed processed Olist tables. Its observed outcomes are reported below; the 20% precision floor remains illustrative rather than a stakeholder-approved requirement.
+**Why 0.12 instead of 0.50?** A cutoff of 0.50 detects only **2.3%** of negative reviews with tuned Logistic Regression. Using validation predictions, **0.12** is the lowest cutoff meeting our illustrative **20% precision** floor, with **21.6% precision** and **36.0% recall** on combined validation folds. On later test orders, the frozen cutoff delivers **24.8% precision** and **22.2% recall**, flagging **1,385 orders (7.6%)** and finding **343** negative reviews. The forest's test precision drops below the policy floor to **18.6%**.
 
+The threshold controls whom to contact; it **does not change PR AUC or ROC AUC**. The 20% floor is a teaching scenario, **not an approved business requirement**. Validation precision also varies over time, so these values should not be treated as guaranteed operating performance.
 
-### Threshold sensitivity on the chronological holdout
+## Additional check: does rebalancing help?
 
-The executed threshold analysis shows why the default 0.50 cutoff is unsuitable for detecting most negative reviews. On the held-out period, Logistic Regression recall increased from **2.3% at 0.50** to **22.2% at a 0.12 threshold**, while precision decreased from 38.9% to 24.8%. Random Forest recall increased from **0.1% at 0.50** to **34.0% at 0.12**, with 18.6% precision. These cutoffs were selected from training out-of-fold predictions, not from the test labels. Lowering a cutoff changes the precision–recall trade-off, not the ranking quality (PR AUC or ROC AUC).
+We separately compared three Logistic Regression training approaches: natural class distribution, balanced class weights, and 50/50 random undersampling. This sensitivity experiment used a **64% fit / 16% validation / 20% test** chronological partition, selected thresholds by **validation F1**, and applied undersampling only to training data. Its design differs from the main five-fold CV analysis, so results are **not directly interchangeable**.
 
-### Class imbalance sensitivity analysis
-
-Only **8.46%** of the **18,235** orders in the held-out test period received a negative review. To investigate whether class imbalance was the primary explanation for weak detection, we compared three **Logistic Regression** training approaches: natural class distribution, balanced class weights, and 50/50 random undersampling. Each approach used the same chronological 64% fitting, 16% validation and 20% testing partitions. Thresholds were chosen to maximise F1 on the validation period; all three models were then refitted on the earlier 80% before one evaluation on the unchanged 20% holdout. Undersampling affected training data only.
-
-| Logistic Regression training | PR AUC | ROC AUC | Validation-selected cutoff | Test precision | Test recall | Test F1 |
+| Training approach | Test PR AUC | Test ROC AUC | Validation cutoff | Test precision | Test recall | Test F1 |
 |---|---:|---:|---:|---:|---:|---:|
-| Natural distribution | **0.1812** | 0.6440 | 0.13 | 23.17% | 22.75% | 0.2296 |
-| Balanced class weights | 0.1793 | **0.6460** | 0.57 | 22.29% | **24.63%** | **0.2340** |
+| Natural | **0.1812** | 0.6440 | 0.13 | 23.17% | 22.75% | 0.2296 |
+| Balanced weights | 0.1793 | **0.6460** | 0.57 | 22.29% | **24.63%** | **0.2340** |
 | 50/50 undersampling | 0.1778 | 0.6413 | 0.58 | **23.29%** | 22.49% | 0.2288 |
 
-Balanced weights detected **380** negative reviews with **1,325** false alarms, compared with **351** detections and **1,164** false alarms using natural training. The 50/50 approach detected **347** negative reviews with **1,143** false alarms. None of the balancing approaches improved PR AUC over natural training, and the F1 differences were small. **We therefore retain the existing model training and selection workflow rather than adopting undersampling or switching the selected model based on this sensitivity check.** This indicates that rebalancing alone did not meaningfully resolve the model's limited predictive separation; it does not establish that imbalance has no effect.
+Neither balancing approach improved test PR AUC over natural training; the F1 differences were small. We therefore **do not change the main model selection** based on this experiment. This does not imply that class imbalance has no effect.
 
-These figures are a **separate Logistic Regression sensitivity experiment**, not a direct replacement for the earlier five-fold time-series cross-validation model comparison. The validation design and model-selection procedures differ, so their numbers should not be interpreted as directly interchangeable.
+Reproduce this check with the [experiment script](../scripts/compare_phase2_class_balance.py) and [recorded results](../reports/phase2/three_approaches.csv).
 
-Reproducible source: [three-approach experiment script](../scripts/compare_phase2_class_balance.py). Recorded results: [CSV](../reports/phase2/three_approaches.csv). The committed notebook was executed top to bottom and includes the threshold plots and tables quoted above.
+## Stakeholder interpretation and limitations
 
-## Practical conclusion
+At the chosen cutoff, Logistic Regression identifies **about 22%** of negative reviews, but **roughly three in four flagged orders are false alarms**. Order and seller complexity, followed by delivery duration, are its strongest predictive signals; these associations do **not** demonstrate causation or establish that outreach will improve reviews.
 
-Tuned Logistic Regression is our selected model: under the one-standard-error rule, the tuned Random Forest's small cross-validation advantage does not justify its extra complexity, and the two perform almost identically on later orders. Neither model has demonstrated sufficient negative-review detection at the default 0.50 cutoff for autonomous customer outreach. Exploratory threshold selection improved recall but increased false alarms. A real intervention policy would require stakeholder-defined costs, further validation and monitoring. The balancing experiment does not justify changing the main model families or training approach.
+Our analysis excludes **4,653** orders reviewed before delivery, and some dissatisfaction drivers are absent from Olist. Purchase-time splitting does not fully simulate label availability. Model scores and the effective cutoff can change across periods. Tuning and threshold selection use the same validation folds, so validation results may be optimistic, while the final test period was not used to make those choices.
 
-## Boundaries and reproducibility
+**Next step:** Agree an actual contact capacity or intervention cost with the stakeholder, select a threshold on validation data for that policy, and monitor precision and contact volume on recent orders before deployment.
 
-Our predictors exclude review scores, review text and review timestamps. Historical review timestamps are used only for eligibility filtering, and delivery outcomes are available only because our prediction point is **after delivery**. Our chronological split is based on purchase date and does not fully reconstruct event-time label availability.
-
-We implement and evaluate the workflow in [the simplified Phase 2 notebook](../notebooks/phase2_delivered_order_classification_simplified.ipynb). The original combined notebook remains available independently.
-
-**Diagram note:** This figure uses the diagram-design editorial conventions: restrained accent, typographic hierarchy, grouped stages and orthogonal routing. It represents our notebook's scope rather than an operational deployment architecture.
+For methods, figures, model errors and references, see the [classification notebook](../notebooks/phase2_delivered_order_classification_final.ipynb). The model-selection rule follows Hastie, Tibshirani and Friedman (2009), *The Elements of Statistical Learning*, section 7.10.
