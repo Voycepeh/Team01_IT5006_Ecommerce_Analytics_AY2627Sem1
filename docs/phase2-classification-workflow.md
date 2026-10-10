@@ -8,17 +8,19 @@ We investigate whether a delivered order will receive a negative customer review
 
 We start with the processed order and item tables from Phase 1. We build one row per order, filter out orders reviewed before delivery and prepare **21 candidate predictors** covering delivery performance, order value, order complexity, product characteristics, geography and purchase timing.
 
-We separate earlier and later orders using an **80% chronological training / 20% test split**, then compare two model families: Logistic Regression and tree-based models (Decision Tree and Random Forest). We evaluate simple baselines before tuning. The five-fold time-series cross-validation runs **inside the training period** and selects a model using **PR AUC (average precision)** because negative reviews are the minority class.
+We separate earlier and later orders using an **80% chronological training / 20% test split**, then compare two model families: Logistic Regression and tree-based models (Decision Tree and Random Forest). We evaluate simple baselines before tuning. The five-fold time-series cross-validation runs **inside the training period** and scores models using **PR AUC (average precision)** because negative reviews are the minority class. We choose between models with the **one-standard-error rule**: the simplest model whose cross-validation PR AUC is within one standard error of the best (Hastie, Tibshirani & Friedman, 2009, *The Elements of Statistical Learning*, section 7.10).
 
 ## What we found
 
 | Held-out metric | Tuned Logistic Regression | Tuned Random Forest |
 |---|---:|---:|
-| PR AUC | 0.187 | 0.188 |
-| ROC AUC | 0.649 | 0.645 |
+| Cross-validation PR AUC | 0.218 | 0.229 |
+| Training PR AUC (overfitting check) | 0.193 | 0.334 |
+| Held-out PR AUC | 0.187 | 0.188 |
+| Held-out ROC AUC | 0.649 | 0.645 |
 | Recall at threshold 0.50 | 2.3% | 0.1% |
 
-We selected **tuned Random Forest during training cross-validation**, according to the pre-established PR AUC selection rule. On later held-out orders, however, the two tuned models have nearly identical ranking performance. We therefore **favour tuned Logistic Regression as a practical candidate** because it is simpler to interpret and implement. This is a pragmatic preference, not a retrospective change to our cross-validation selection criterion.
+We **select tuned Logistic Regression**. Tuned Random Forest had the highest cross-validation PR AUC (0.229), but tuned Logistic Regression (0.218) was within one standard error (0.020) of it, so the one-standard-error rule chooses the simpler model. The held-out results support this choice: the two models rank later orders almost identically, and the Random Forest overfits more (training PR AUC 0.334 vs validation 0.229, against 0.193 vs 0.218 for Logistic Regression). An earlier version of this workflow selected the highest cross-validation score outright and recommended Logistic Regression only as a practical preference; the one-standard-error rule makes the selection and the recommendation consistent.
 
 The 0.50 threshold detects very few negative reviews for either model. The notebook includes an **executed training-only forward-chaining out-of-fold threshold analysis** for both tuned finalists. It plots precision, recall and F1 across candidate thresholds, selects an illustrative operating point that maximises recall subject to at least 20% out-of-fold precision (falling back explicitly to best F1 if infeasible), and compares that frozen cutoff with 0.50 on the held-out period. The 20% precision floor is an analytical scenario, not an agreed stakeholder requirement. No threshold is selected using held-out outcomes. Threshold changes do not change PR AUC or ROC AUC. The threshold analysis has been executed using the committed processed Olist tables. Its observed outcomes are reported below; the 20% precision floor remains illustrative rather than a stakeholder-approved requirement.
 
@@ -41,11 +43,11 @@ Balanced weights detected **380** negative reviews with **1,325** false alarms, 
 
 These figures are a **separate Logistic Regression sensitivity experiment**, not a direct replacement for the earlier five-fold time-series cross-validation model comparison. The validation design and model-selection procedures differ, so their numbers should not be interpreted as directly interchangeable.
 
-Reproducible source: [three-approach experiment script](../scripts/compare_phase2_class_balance.py). Recorded results: [CSV](../reports/phase2/three_approaches.csv). The threshold-analysis code is included in the main notebook; its saved GitHub copy does not currently embed the executed threshold plots or tables. The executed notebook was produced as a GitHub Actions artifact. Re-run the notebook to regenerate those outputs.
+Reproducible source: [three-approach experiment script](../scripts/compare_phase2_class_balance.py). Recorded results: [CSV](../reports/phase2/three_approaches.csv). The committed notebook was executed top to bottom and includes the threshold plots and tables quoted above.
 
 ## Practical conclusion
 
-Our cross-validation-selected Random Forest remains the formal selection result, while tuned Logistic Regression remains the simpler practical candidate given near-identical held-out ranking performance. Neither model has demonstrated sufficient negative-review detection at the default 0.50 cutoff for autonomous customer outreach. Exploratory threshold selection improved recall but increased false alarms. A real intervention policy would require stakeholder-defined costs, further validation and monitoring. The balancing experiment does not justify changing the main model families or training approach.
+Tuned Logistic Regression is our selected model: under the one-standard-error rule, the tuned Random Forest's small cross-validation advantage does not justify its extra complexity, and the two perform almost identically on later orders. Neither model has demonstrated sufficient negative-review detection at the default 0.50 cutoff for autonomous customer outreach. Exploratory threshold selection improved recall but increased false alarms. A real intervention policy would require stakeholder-defined costs, further validation and monitoring. The balancing experiment does not justify changing the main model families or training approach.
 
 ## Boundaries and reproducibility
 
