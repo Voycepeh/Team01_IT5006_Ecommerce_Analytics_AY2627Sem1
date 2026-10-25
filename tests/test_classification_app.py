@@ -26,7 +26,9 @@ def test_export_matches_actual_final_notebook_cells():
     artifact = load_model()
     scored = predict_from_delivered_order_artifact(artifact, namespace['X_test'])
     expected = model.predict_proba(namespace['X_test'])[:, 1]
-    np.testing.assert_allclose(scored.negative_review_probability, expected, atol=1e-12, rtol=0)
+    # BLAS/platform rounding can differ around 1e-11. Keep decisions exact.
+    np.testing.assert_array_equal(scored.predicted_negative_review, (expected >= .12).astype(int))
+    np.testing.assert_allclose(scored.negative_review_probability, expected, atol=1e-9, rtol=0)
     assert confusion_matrix(namespace['y_test'], scored.predicted_negative_review).tolist() == [[15650, 1042], [1200, 343]]
     assert len(namespace['X_train']) == 72936
 
@@ -44,6 +46,8 @@ def valid_order():
 
 
 @pytest.mark.parametrize('changes', [
+    {'max_installments': -1}, {'max_installments': 1.5},
+    {'order_item_value': 1e308, 'order_freight_value': 1e308},
     {'item_count': 0}, {'item_count': 1.5}, {'delivery_days': float('nan')},
     {'order_item_value': float('inf')}, {'seller_count': 2}, {'n_seller_states': 2},
     {'late_delivery_flag': 1}, {'freight_share': .8}, {'customer_state': 'invalid'},
@@ -77,12 +81,12 @@ def test_streamlit_form():
     assert not app.exception
     app.button[0].click().run()
     assert 'Confirm' in app.error[0].value
-    app.checkbox[0].check().run()
+    app.checkbox[0].check()
     app.button[0].click().run()
     assert not app.exception
-    assert not app.error
+    assert not app.error, [error.value for error in app.error]
     assert len(app.metric) == 1
-    app.number_input[0].set_value(0).run()
+    app.number_input[0].set_value(0)
     app.button[0].click().run()
     assert app.error
     assert not app.metric  # No stale result after an invalid submission.
@@ -100,3 +104,22 @@ def test_streamlit_missing_artifact(monkeypatch):
     assert not app.exception
     assert 'could not be loaded' in app.error[0].value
     st.cache_resource.clear()
+
+
+def test_numpy_numeric_inputs_and_zero_installments():
+    values = valid_order()
+    values['item_count'] = np.int64(1)
+    values['max_installments'] = 0
+    result = predict_order(load_model(), values)
+    assert np.isfinite(result.negative_review_probability)
+
+
+@pytest.mark.parametrize('field,value', [('artifact_version', 999), ('threshold', .5)])
+def test_reject_wrong_artifact_contract(tmp_path, field, value):
+    import joblib
+    artifact = load_model()
+    artifact[field] = value
+    path = tmp_path / 'wrong.joblib'
+    joblib.dump(artifact, path)
+    with pytest.raises(ValueError, match='contract'):
+        load_model(path)

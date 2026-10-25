@@ -22,12 +22,12 @@ def model():
 
 try:
     artifact = model()
+    options = category_options(artifact)
 except Exception:
     logging.exception('Classification artifact could not be loaded')
     st.error('The model could not be loaded. Ask the maintainer to check model.joblib and the pinned dependencies. No prediction was made.')
     st.stop()
 
-options = category_options(artifact)
 labels = {
     'item_count': 'Number of items', 'order_item_value': 'Total item value (BRL)',
     'order_freight_value': 'Total freight (BRL)', 'seller_count': 'Number of sellers',
