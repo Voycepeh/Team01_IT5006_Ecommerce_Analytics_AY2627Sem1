@@ -1,0 +1,28 @@
+{
+  "notebook": "notebooks/phase2_delivered_order_classification_final.ipynb",
+  "notebook_sha256": "fc66d525fcc89dbecae63036da5ae31574fe75f7a9efdbbe9ae307e731f17e80",
+  "sklearn_version": "1.9.0",
+  "train_rows": 72936,
+  "test_rows": 18235,
+  "parameters": {
+    "C": 0.01,
+    "class_weight": null,
+    "random_state": 42
+  },
+  "test_confusion_matrix": [
+    [
+      15650,
+      1042
+    ],
+    [
+      1200,
+      343
+    ]
+  ],
+  "test_average_precision": 0.18669932002582007,
+  "test_roc_auc": 0.6492726519074028,
+  "source_sha256": {
+    "data/processed/order_level.csv": "a272aba8bc5f64e6bc5d7ae98a41fc39cea5209f9a65e5d8f92116c46954ab22",
+    "data/processed/item_level.csv": "ff0e796869c4b57e4c06bb3f107cb9661b247bf1da4ba3f9e77cfa8e565b51e5"
+  }
+}

@@ -67,3 +67,7 @@ Project dependencies are recorded in [`requirements.txt`](requirements.txt) and 
 ## Team contribution guide
 
 Team workflow and local setup instructions are kept separately in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+## Phase 3 classification application
+
+A separate delivered-order negative-review risk app uses the final notebook's tuned Logistic Regression and frozen 0.12 cutoff. See [setup, validation and Community Cloud instructions](deployment/classification/README.md). This app has not yet been verified at a live URL.
