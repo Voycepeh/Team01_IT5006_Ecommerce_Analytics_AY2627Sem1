@@ -123,3 +123,34 @@ def test_reject_wrong_artifact_contract(tmp_path, field, value):
     joblib.dump(artifact, path)
     with pytest.raises(ValueError, match='contract'):
         load_model(path)
+
+
+def test_related_inputs_and_payment_override(monkeypatch):
+    import src.classification_app as module
+    original = module.predict_order
+    captured = []
+
+    def capture(artifact, values):
+        captured.append(values.copy())
+        return original(artifact, values)
+
+    monkeypatch.setattr(module, 'predict_order', capture)
+    app = AppTest.from_file(str(APP)).run()
+    assert not app.exception
+    app.checkbox(key='eligible').check()
+    app.number_input(key='order_item_value').set_value(200.)
+    app.number_input(key='order_freight_value').set_value(40.)
+    app.number_input(key='days_early').set_value(-3)
+    app.button[0].click().run()
+    assert not app.error, [error.value for error in app.error]
+    assert captured[-1]['payment_total'] == 240.
+    assert captured[-1]['freight_share'] == pytest.approx(40/240)
+    assert captured[-1]['late_delivery_flag'] == 1
+    assert captured[-1]['same_state'] == (captured[-1]['customer_state'] == captured[-1]['seller_state'])
+    assert set(captured[-1]) == set(DELIVERED_MODEL_FEATURES)
+
+    app.number_input(key='payment_total').set_value(225.)
+    app.button[0].click().run()
+    assert not app.error
+    assert captured[-1]['payment_total'] == 225.
+    assert captured[-1]['freight_share'] == pytest.approx(40/240)
