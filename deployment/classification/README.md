@@ -2,6 +2,8 @@
 
 Standalone Streamlit POC for customer service. Predicts a 1–2 star review **after delivery and before review submission**. The Phase 1 dashboard and regression work are separate and unchanged. No API server or FastAPI is used.
 
+[Open the live classification POC](https://team01it5006ecommerceanalyticsay2627sem1-tsrzb29fqhr2k5khdoplo.streamlit.app/)
+
 ## Run
 
 Use Python 3.12 from the repository root:
@@ -17,10 +19,11 @@ The app needs only its committed `model.joblib`, `src/` modules and the dedicate
 
 ## Usage
 
-1. Confirm the order is delivered and has not yet been reviewed.
-2. Enter order totals in Brazilian reais, counts, delivery timing and product means. Delivery days are whole elapsed days from purchase to delivery; days early are promised date minus actual delivery, with negative values indicating lateness.
-3. Select customer and first seller states, primary category, purchase month (year included), and purchase weekday. These choices come from fitted training categories. This historical POC intentionally restricts months to the training period; it is not ready for current live orders.
-4. Click **Assess review risk**. A score at or above 12% is flagged for prioritised follow-up; below the cutoff does not mean no risk.
+1. Enter the common **Order details** and **Delivery and location** inputs. Days ahead of promise are positive for early delivery, zero for on-time delivery and negative for late delivery.
+2. Expand **Additional details** when you need different payment information, product averages or historical purchase context. These are still model predictors, not optional features: the visible example defaults are used when you do not edit them. Purchase month and weekday start at the fitted training modes.
+3. Leave total paid blank to calculate it from item total plus freight, or enter the recorded amount to override it. Freight share, lateness and same-state flags are calculated automatically.
+4. Confirm the order is completed and has not yet been reviewed, then click **Assess review risk**. This is a human acknowledgement of intended use; review information and the confirmation are not predictors and the model cannot verify review status.
+5. A score at or above 12% is flagged for prioritised follow-up. Below the cutoff does not mean no risk.
 
 Freight share is freight divided by item value plus freight (zero when both are zero). Lateness and same-state flags are derived automatically. For multi-item orders, product weight, volume and photo count are arithmetic item means. Volume is length × height × width per item before averaging. Primary category is the category with greatest summed item price, with alphabetical tie breaking. Use the first seller state recorded in the team's order-level data.
 
@@ -53,7 +56,7 @@ Create a **new app**, retaining the existing Phase 1 deployment:
 
 See [official deployment instructions](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app). After creating the app, verify its live URL opens, submit a valid order, reject an ineligible order and an invalid count, and compare the live result with the same local inputs. Record that verified URL in the final report and capture screenshots for the locked presentation deck. The artifact and app can be included in the final deployment ZIP along with source and requirements.
 
-**Status: prepared and tested locally; no Community Cloud app or live URL has been created or verified.** Deployment and live smoke testing remain before academic submission.
+**Status: the original POC was deployed and live smoke-tested on 25 October 2026.** A valid example returned 6.1% risk, matching the local score 0.06134775282714478; unconfirmed order status and zero item count were rejected. The revised layout must be checked live after its PR is merged and Community Cloud updates. No claim is made that the revised layout is already live.
 
 ## Academic review
 

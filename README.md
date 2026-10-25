@@ -70,4 +70,6 @@ Team workflow and local setup instructions are kept separately in [`CONTRIBUTING
 
 ## Phase 3 classification application
 
-A separate delivered-order negative-review risk app uses the final notebook's tuned Logistic Regression and frozen 0.12 cutoff. See [setup, validation and Community Cloud instructions](deployment/classification/README.md). This app has not yet been verified at a live URL.
+[Open the live classification POC](https://team01it5006ecommerceanalyticsay2627sem1-tsrzb29fqhr2k5khdoplo.streamlit.app/)
+
+Estimate negative-review risk after delivery and before review submission using the final notebook's tuned Logistic Regression and frozen 0.12 cutoff. The live app has been smoke-tested for predictions and input validation. See [usage, model limitations and deployment instructions](deployment/classification/README.md).
