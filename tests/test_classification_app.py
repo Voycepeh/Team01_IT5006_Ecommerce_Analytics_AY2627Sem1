@@ -76,20 +76,11 @@ def test_missing_artifact(tmp_path):
         load_model(tmp_path / 'missing.joblib')
 
 
-def test_streamlit_form():
+def test_streamlit_batch_interface():
     app = AppTest.from_file(str(APP)).run()
     assert not app.exception
-    app.button[0].click().run()
-    assert 'Confirm' in app.error[0].value
-    app.checkbox[0].check()
-    app.button[0].click().run()
-    assert not app.exception
-    assert not app.error, [error.value for error in app.error]
-    assert len(app.metric) == 1
-    app.number_input[0].set_value(0)
-    app.button[0].click().run()
-    assert app.error
-    assert not app.metric  # No stale result after an invalid submission.
+    assert any('Order Risk Assessment' in x.value for x in app.title)
+    assert any('Assess negative-review risk' in b.label for b in app.button)
 
 
 def test_streamlit_missing_artifact(monkeypatch):
@@ -125,32 +116,52 @@ def test_reject_wrong_artifact_contract(tmp_path, field, value):
         load_model(path)
 
 
-def test_related_inputs_and_payment_override(monkeypatch):
-    import src.classification_app as module
-    original = module.predict_order
-    captured = []
+def test_batch_matches_single_order_and_optional_imputation():
+    from src.classification_batch import TEMPLATE, prepare_batch, score_batch, REQUIRED
+    artifact = load_model()
+    values = valid_order()
+    minimal = TEMPLATE.copy()
+    minimal['order_id'] = ['ABC']
+    minimal['days_early'] = [5]
+    result, quality = score_batch(minimal, artifact)
+    assert result['order_id'].iloc[0] == 'ABC'
+    assert result['negative_review_probability'].between(0, 1).all()
+    assert quality['missing_optional_cells'] > 0
+    assert set(REQUIRED).issubset(minimal.columns)
 
-    def capture(artifact, values):
-        captured.append(values.copy())
-        return original(artifact, values)
+    all_features = dict(values)
+    all_features.pop('same_state')
+    all_features.pop('freight_share')
+    all_features.pop('late_delivery_flag')
+    full = __import__('pandas').DataFrame([{'order_id': 'C1', **all_features}])
+    scored, quality = score_batch(full, artifact)
+    expected = predict_order(artifact, values)
+    assert scored['negative_review_probability'].iloc[0] == pytest.approx(
+        expected['negative_review_probability'], abs=1e-6)
+    assert quality['missing_optional_cells'] == 0
 
-    monkeypatch.setattr(module, 'predict_order', capture)
-    app = AppTest.from_file(str(APP)).run()
-    assert not app.exception
-    app.checkbox(key='eligible').check()
-    app.number_input(key='order_item_value').set_value(200.)
-    app.number_input(key='order_freight_value').set_value(40.)
-    app.number_input(key='days_early').set_value(-3)
-    app.button[0].click().run()
-    assert not app.error, [error.value for error in app.error]
-    assert captured[-1]['payment_total'] == 240.
-    assert captured[-1]['freight_share'] == pytest.approx(40/240)
-    assert captured[-1]['late_delivery_flag'] == 1
-    assert captured[-1]['same_state'] == (captured[-1]['customer_state'] == captured[-1]['seller_state'])
-    assert set(captured[-1]) == set(DELIVERED_MODEL_FEATURES)
 
-    app.number_input(key='payment_total').set_value(225.)
-    app.button[0].click().run()
-    assert not app.error
-    assert captured[-1]['payment_total'] == 225.
-    assert captured[-1]['freight_share'] == pytest.approx(40/240)
+@pytest.mark.parametrize('changes', [
+    {'item_count': 0}, {'days_early': -20}, {'customer_state': 'invalid'},
+    {'order_id': None}, {'order_item_value': -1},
+])
+def test_batch_rejects_invalid_rows(changes):
+    from src.classification_batch import TEMPLATE, prepare_batch
+    sample = TEMPLATE.copy()
+    for field, value in changes.items():
+        sample[field] = value
+    with pytest.raises(ValueError):
+        prepare_batch(sample, load_model())
+
+
+def test_demo_is_only_heldout_and_reproducible():
+    from src.classification_batch import demo_test_sample
+    from src.export_classification import notebook_population
+    population = notebook_population()
+    heldout = population.iloc[int(len(population)*.8):]
+    demo, labels = demo_test_sample(ROOT)
+    assert len(demo) == 100
+    assert demo['order_id'].is_unique
+    assert set(demo['order_id']).issubset(set(heldout['order_id']))
+    assert 'is_negative_review' not in demo.columns
+    assert len(labels) == 100

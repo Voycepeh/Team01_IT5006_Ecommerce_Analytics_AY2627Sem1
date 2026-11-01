@@ -17,15 +17,13 @@ python -m streamlit run deployment/classification/app.py
 
 The app needs only its committed `model.joblib`, `src/` modules and the dedicated requirements. It does not load raw/processed data, fit a model, or download anything at runtime. Load only repository-owned joblib files: pickle-based formats execute Python code and must never be accepted as user uploads.
 
-## Usage
+## Three-step app workflow
 
-1. Enter the common **Order details** and **Delivery and location** inputs. Days ahead of promise are positive for early delivery, zero for on-time delivery and negative for late delivery.
-2. Expand **Additional details** when you need different payment information, product averages or historical purchase context. These are still model predictors, not optional features: the visible example defaults are used when you do not edit them. Purchase month and weekday start at the fitted training modes.
-3. Leave total paid blank to calculate it from item total plus freight, or enter the recorded amount to override it. Freight share, lateness and same-state flags are calculated automatically.
-4. Confirm the order is completed and has not yet been reviewed, then click **Assess review risk**. This is a human acknowledgement of intended use; review information and the confirmation are not predictors and the model cannot verify review status.
-5. A score at or above 12% is flagged for prioritised follow-up. Below the cutoff does not mean no risk.
+1. **Select orders:** upload a UTF-8 CSV (at most 10 MB, up to 10,000 unique orders), or click **Load 100 demo orders**. The demo deterministically samples the chronological 20% held-out test population, excluding the original training rows. It reads the committed Phase 1 processed datasets when requested, never retrains the model, and never passes review outcomes to inference. Future backend/database integration is a labelled placeholder only.
+2. **Run risk assessment:** validate input, derive freight share, lateness and state match, and score using the existing frozen Logistic Regression pipeline. Required CSV fields: `order_id, item_count, order_item_value, order_freight_value, delivery_days, days_early, customer_state, seller_state`. Every other model predictor is optional and may be imputed by the fitted training-time preprocessing; uploaders are warned when this happens. A template is available directly in the app sidebar. The source data should only contain delivered, not-yet-reviewed orders; this is a documented assumption, not independently verified by the model.
+3. **Review and export:** inspect probability percentages and flags based on the frozen 12% threshold. Export the original CSV data with `negative_review_probability` (0–1) and `follow_up_flag` (boolean) appended. The demo additionally allows an explicitly labelled retrospective outcome comparison.
 
-Freight share is freight divided by item value plus freight (zero when both are zero). Lateness and same-state flags are derived automatically. For multi-item orders, product weight, volume and photo count are arithmetic item means. Volume is length × height × width per item before averaging. Primary category is the category with greatest summed item price, with alphabetical tie breaking. Use the first seller state recorded in the team's order-level data.
+The in-app **About & Help** sidebar contains usage guidance, CSV requirements, an explanation of preprocessing, historical model performance and limitations. The complete-feature trained model's held-out results do **not** establish equivalent performance for reduced-input CSV uploads. Missing predictor fields can materially affect accuracy.
 
 The cutoff is an illustrative validation policy, not a business-approved intervention rule. The score is not a calibrated guarantee. Outreach effects have not been established. Historical test precision is 24.8%, recall 22.2%; about three quarters of flags were false alarms. Do not automatically penalise customers or sellers.
 
