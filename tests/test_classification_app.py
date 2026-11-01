@@ -165,3 +165,17 @@ def test_demo_is_only_heldout_and_reproducible():
     assert set(demo['order_id']).issubset(set(heldout['order_id']))
     assert 'is_negative_review' not in demo.columns
     assert len(labels) == 100
+    # Actual integration path: the held-out months can be unseen by training.
+    from src.classification_batch import score_batch
+    scored, quality = score_batch(demo, load_model())
+    assert len(scored) == 100
+    assert scored['negative_review_probability'].between(0, 1).all()
+
+
+def test_unseen_optional_categorical_is_encoded_not_rejected():
+    from src.classification_batch import TEMPLATE, score_batch
+    data = TEMPLATE.copy()
+    data['purchase_month'] = '2099-01'
+    scored, _ = score_batch(data, load_model())
+    assert len(scored) == 1
+    assert scored['negative_review_probability'].between(0, 1).all()
