@@ -79,9 +79,13 @@ def prepare_batch(frame: pd.DataFrame, artifact):
             records[field] = np.nan
         else:
             records[field] = records[field].replace(r"^\s*$", np.nan, regex=True)
-            wrong = records[field].notna() & ~records[field].isin(allowed)
-            if wrong.any():
-                raise ValueError(f"{field}: unsupported category at CSV row {int(wrong.idxmax()) + 2}")
+            # Categorical encoder was fitted with handle_unknown="ignore".
+            # Later chronological test orders can legitimately include unseen
+            # purchase months/categories. Preserve them for model inference.
+            if field in REQUIRED:
+                wrong = records[field].notna() & ~records[field].isin(allowed)
+                if wrong.any():
+                    raise ValueError(f"{field}: unsupported category at CSV row {int(wrong.idxmax()) + 2}")
     for field in REQUIRED:
         if records[field].isna().any():
             raise ValueError(f"{field} is required for every row")
