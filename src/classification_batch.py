@@ -82,7 +82,7 @@ def prepare_batch(frame: pd.DataFrame, artifact):
             wrong = records[field].notna() & ~records[field].isin(allowed)
             if wrong.any():
                 raise ValueError(f"{field}: unsupported category at CSV row {int(wrong.idxmax()) + 2}")
-    if records["seller_count"].gt(records["item_count"]).any():
+    for field in REQUIRED:\n        if records[field].isna().any():\n            raise ValueError(f"{field} is required for every row")\n    if records["seller_count"].gt(records["item_count"]).any():
         raise ValueError("seller_count cannot exceed item_count")
     if records["n_seller_states"].gt(records["seller_count"]).any():
         raise ValueError("n_seller_states cannot exceed seller_count")
