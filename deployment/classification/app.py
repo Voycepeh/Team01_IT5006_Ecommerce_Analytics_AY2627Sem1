@@ -126,13 +126,13 @@ if result is not None:
             "and handled by the fitted model's training-derived imputers. "
             "Reduced-input prediction quality has not been independently validated."
         )
+    display = result.copy()
+    display["Negative review risk (%)"] = (display["negative_review_probability"] * 100).round(1)
+    display = display.drop(columns=["negative_review_probability"])
     st.dataframe(
-        result, use_container_width=True, hide_index=True,
+        display, use_container_width=True, hide_index=True,
         column_config={
-            "negative_review_probability": st.column_config.NumberColumn(
-                "Negative review probability", format="%.1f%%",
-                help="Probability is stored as 0–1 in the downloaded CSV.",
-            ),
+            "Negative review risk (%)": st.column_config.NumberColumn(format="%.1f"),
             "follow_up_flag": st.column_config.CheckboxColumn("Follow up (≥12%)"),
         },
     )
