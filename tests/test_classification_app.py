@@ -79,8 +79,8 @@ def test_missing_artifact(tmp_path):
 def test_streamlit_batch_interface():
     app = AppTest.from_file(str(APP)).run()
     assert not app.exception
-    assert any('Order Risk Assessment' in x.value for x in app.title)
-    assert any('Assess negative-review risk' in b.label for b in app.button)
+    assert any('Customer Experience Risk Monitor' in x.value for x in app.title)
+    assert any('Identify at-risk orders' in b.label for b in app.button)
 
 
 def test_streamlit_missing_artifact(monkeypatch):

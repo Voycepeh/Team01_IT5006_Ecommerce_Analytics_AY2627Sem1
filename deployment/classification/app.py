@@ -14,10 +14,10 @@ from src.classification_batch import (
     REQUIRED, OPTIONAL, TEMPLATE, demo_test_sample, read_uploaded_csv, score_batch,
 )
 
-st.set_page_config(page_title="Order Risk Assessment | IT5006", page_icon="📦", layout="wide")
-st.title("Order Risk Assessment")
-st.caption("Spot delivered orders that may need a customer follow-up, before a review is submitted.")
-st.info("Historical Olist proof of concept. Predictions are for delivered, not-yet-reviewed orders.")
+st.set_page_config(page_title="Customer Experience Risk Monitor | IT5006", page_icon="📦", layout="wide")
+st.title("Customer Experience Risk Monitor")
+st.markdown("**Identify at-risk customers before they leave a negative review.**")
+st.write("Prioritise customer follow-ups using predicted review risk, so your team can focus attention where it matters most.")
 
 @st.cache_resource
 def model():
@@ -42,22 +42,48 @@ with st.sidebar:
         st.write("3. Review and download the scored CSV.")
         st.caption("Each CSV row is one delivered order, after delivery and before review. Review scores are never model inputs.")
     with st.expander("CSV requirements"):
-        st.write("Required columns:")
-        st.code(", ".join(REQUIRED), language=None)
-        st.write("Optional predictor columns:")
-        st.code(", ".join(OPTIONAL), language=None)
-        st.caption("Missing optional values use the trained pipeline's imputation. The app derives freight share, late-delivery flag and same-state automatically.")
+        st.markdown("**Required columns**")
+        for column in REQUIRED:
+            st.markdown("* " + column)
+        st.markdown("**Optional predictor columns**")
+        for column in OPTIONAL:
+            st.markdown("* " + column)
+        st.caption("Missing optional values use the fitted model's training-derived imputation. Freight share, lateness and matching states are automatically calculated.")
         st.download_button("Download CSV template", TEMPLATE.to_csv(index=False), "order_template.csv", "text/csv")
     with st.expander("How it works"):
-        st.write("Validate each row → derive known features → impute missing optional values using training statistics → preprocess and run fitted Logistic Regression → return risk probability.")
-        st.write("A risk score of at least 12% is flagged for possible customer follow-up. This threshold was frozen from the final notebook.")
+        st.markdown(
+            "* **Upload your CSV**, or connect to an order database (**future feature**).\n"
+            "* **Check required columns** for complete, valid inputs.\n"
+            "* **Fill missing optional values** from training statistics.\n"
+            "* **Prepare the data** for prediction.\n"
+            "* **Run the trained Logistic Regression model** to assess review risk.\n"
+            "* **Return a risk score** for each order.\n"
+            "* **Recommend follow-up** when the risk score is **12% or higher**."
+        )
     with st.expander("Model and limitations"):
-        st.write("Tuned Logistic Regression (C=0.01), frozen 12% threshold. Historical held-out precision: 24.8%; recall: 22.2%.")
-        st.write("Scores are estimates, not calibrated guarantees. Most historical flags were false alarms. Missing predictors may make scores less reliable; the reduced CSV schema has not been independently evaluated.")
-        st.write("Historical 2016–2018 Olist data only. No automatic customer intervention or live database connectivity.")
+        st.markdown(
+            "* **Model:** Tuned Logistic Regression (C=0.01), fixed 12% follow-up cutoff.\n"
+            "* **Historical test metrics:** Precision 24.8%; recall 22.2%.\n"
+            "* **Training data:** 72,936 earlier eligible Olist orders from 2016–2018; "
+            "18,235 later orders reserved for testing.\n"
+            "* **Input quality:** Where possible, supply all 21 original predictors. "
+            "The published test metrics do not establish equivalent performance for reduced-input CSVs."
+        )
+        st.markdown("**Limitations**")
+        st.markdown(
+            "* **Imbalanced reviews:** Only 8.5% of test orders received 1–2 stars.\n"
+            "* **False positives:** 1,042 of 1,385 flagged test orders did not receive a negative "
+            "review; 343 did. The 12% cutoff was chosen with a validation precision floor of 20%, "
+            "but many negative reviews were still missed.\n"
+            "* **Human judgement:** Customer Experience staff should review flagged orders before "
+            "deciding on outreach; a flag is not proof of dissatisfaction.\n"
+            "* **Uncertainty:** Scores are not calibrated guarantees. Optional missing inputs "
+            "may reduce reliability, and reduced-schema accuracy has not been independently evaluated.\n"
+            "* **Scope:** Historical Olist records; no live backend or automatic customer outreach."
+        )
 
 st.subheader("1. Select orders")
-upload_tab, demo_tab = st.tabs(["Upload CSV", "Load Demo Data"])
+upload_tab, demo_tab = st.tabs(["Upload CSV", "Explore Historical Orders"])
 with upload_tab:
     upload = st.file_uploader("Upload completed orders", type=["csv"], help="One unique order per row; CSV up to 10 MB")
     st.caption("Future feature: Connect to backend order database.")
@@ -95,8 +121,8 @@ if frame is not None:
     with st.expander("Preview input rows"):
         st.dataframe(frame.head(10), use_container_width=True, hide_index=True)
 
-st.subheader("2. Run risk assessment")
-if st.button("Assess negative-review risk", type="primary", disabled=frame is None):
+st.subheader("2. Identify at-risk orders")
+if st.button("Identify at-risk orders", type="primary", disabled=frame is None):
     try:
         result, quality = score_batch(frame, artifact)
         st.session_state["scored"] = result
@@ -113,11 +139,11 @@ if st.button("Assess negative-review risk", type="primary", disabled=frame is No
 
 result = st.session_state.get("scored")
 if result is not None:
-    st.subheader("3. Review and export")
+    st.subheader("3. Prioritise and export follow-ups")
     flagged = int(result["follow_up_flag"].sum())
     a,b,c = st.columns(3)
     a.metric("Orders scored", f"{len(result):,}")
-    b.metric("Flagged for follow-up", f"{flagged:,}")
+    b.metric("Follow-ups recommended", f"{flagged:,}")
     c.metric("Share flagged", f"{flagged/len(result):.1%}")
     q = st.session_state["quality"]
     if q["missing_optional_cells"]:
@@ -127,23 +153,32 @@ if result is not None:
             "Reduced-input prediction quality has not been independently validated."
         )
     display = result.copy()
-    display["Negative review risk (%)"] = (display["negative_review_probability"] * 100).round(1)
-    display = display.drop(columns=["negative_review_probability"])
+    display["Negative Review Risk (%)"] = (display["negative_review_probability"] * 100).round(1)
+    display["Follow-up Recommended"] = display["follow_up_flag"].map({True: "Yes", False: "No"})
+    display = display.drop(columns=["negative_review_probability", "follow_up_flag"])
+    first = ["order_id", "Negative Review Risk (%)", "Follow-up Recommended"]
+    display = display[first + [col for col in display if col not in first]]
+    display = display.rename(columns={"order_id": "Order ID"})
+
+    def highlight_results(row):
+        flagged_row = row["Follow-up Recommended"] == "Yes"
+        return [
+            "background-color: #dcecf5; color: #14354d; font-weight: bold"
+            if col in ("Negative Review Risk (%)", "Follow-up Recommended")
+            else "background-color: #fff0d9; color: #5b3c17" if flagged_row else ""
+            for col in row.index
+        ]
+
     st.dataframe(
-        display, use_container_width=True, hide_index=True,
+        display.style.apply(highlight_results, axis=1),
+        use_container_width=True, hide_index=True,
         column_config={
-            "Negative review risk (%)": st.column_config.NumberColumn(format="%.1f"),
-            "follow_up_flag": st.column_config.CheckboxColumn("Follow up (≥12%)"),
+            "Order ID": st.column_config.TextColumn("Order ID", width="medium"),
+            "Negative Review Risk (%)": st.column_config.NumberColumn("Negative Review Risk (%)", format="%.1f"),
+            "Follow-up Recommended": st.column_config.TextColumn("Follow-up Recommended", width="medium"),
         },
     )
     st.download_button(
-        "Download scored CSV", data=result.to_csv(index=False),
+        "Export follow-up list", data=result.to_csv(index=False),
         file_name="orders_with_review_risk.csv", mime="text/csv", type="primary",
     )
-    if "demo_labels" in st.session_state:
-        with st.expander("Historical demo: compare against actual outcomes"):
-            labels = st.session_state["demo_labels"]
-            evaluation = result[["order_id", "negative_review_probability", "follow_up_flag"]].copy()
-            evaluation["actual_negative_review"] = evaluation["order_id"].map(labels)
-            st.caption("Retrospective comparison only. True review outcomes were not used for scoring or adjusting the threshold; this 100-order sample is not a new model evaluation.")
-            st.dataframe(evaluation, hide_index=True, use_container_width=True)
