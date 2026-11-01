@@ -125,5 +125,5 @@ def demo_test_sample(root, *, n=100, seed=42):
     heldout = population.iloc[cutoff:]
     sampled = heldout.sample(n=n, random_state=seed).sort_values("purchase_time")
     labels = sampled.set_index("order_id")["is_negative_review"].astype(int)
-    features = sampled[["order_id", *DELIVERED_MODEL_FEATURES]].reset_index(drop=True)
+    features = sampled[["order_id", *(f for f in DELIVERED_MODEL_FEATURES if f not in DERIVED)]].reset_index(drop=True)
     return features, labels
